@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Add this if it doesn't already exist */
+:root {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Space Mono", monospace;
+}
