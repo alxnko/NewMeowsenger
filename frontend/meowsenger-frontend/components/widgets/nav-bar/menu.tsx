@@ -27,14 +27,14 @@ export default function NavMenu({ isOpen, onClose }: NavMenuProps) {
       hideCloseButton
       className={clsx(
         "p-2 pb-20 left-1/2 transform -translate-x-1/2 items-center justify-center",
-        "sm:max-w-96"
+        "max-w-[90%] sm:max-w-96"
       )}
       classNames={{ wrapper: "items-center justify-center" }}
     >
       <DrawerContent>
         <DrawerBody>
           <Button isIconOnly variant="faded" onPress={toggleTheme}>
-            {theme === "light" ? <FaMoon /> : <FaSun /> }
+            {theme === "light" ? <FaMoon /> : <FaSun />}
           </Button>
         </DrawerBody>
       </DrawerContent>
