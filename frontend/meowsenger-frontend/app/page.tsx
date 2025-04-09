@@ -6,12 +6,13 @@ import { Button } from "@heroui/button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ROUTES } from "@/config/site";
+import Container from "@/components/elements/container";
 
 export default function Home() {
   const router = useRouter();
 
   return (
-    <section className="flex flex-col items-center justify-center gap-4 py-8 md:py-10 min-h-screen">
+    <Container>
       <div className="inline-block max-w-xl text-center justify-center">
         <span className={title()}>use </span>
         <span className={title({ color: "green" })}>meowsenger</span>
@@ -50,6 +51,6 @@ export default function Home() {
           </Button>
         </div>
       </div>
-    </section>
+    </Container>
   );
 }
