@@ -9,11 +9,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      # messaging:
-      #   condition: service_healthy
-    environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
-      # - NEXT_PUBLIC_MESSAGING_URL=http://messaging:8080
+    env_file:
+      - ./frontend/meowsenger-frontend/.env
     networks:
       - meowsenger-network
 
@@ -22,12 +19,13 @@ services:
       context: ./backend
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
     environment:
-      - DEBUG=True
-      - SECRET_KEY=dev_secret_key
-      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
+      - DB_HOST=db # Explicitly set this to override .env file in Docker environment
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
@@ -36,21 +34,27 @@ services:
     networks:
       - meowsenger-network
 
-  # messaging:
-  #   build:
-  #     context: ./messaging
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     - SPRING_PROFILES_ACTIVE=dev
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #   networks:
-  #     - meowsenger-network
+  db:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=meowsenger
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - meowsenger-network
 
 networks:
   meowsenger-network:
     driver: bridge
+
+volumes:
+  postgres_data:

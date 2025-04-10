@@ -1,9 +1,10 @@
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent } from "@heroui/drawer";
-import { FaSun, FaMoon } from "react-icons/fa";
+import { FaSun, FaMoon, FaSignOutAlt } from "react-icons/fa";
 import React from "react";
 import { useTheme } from "next-themes";
 import clsx from "clsx";
+import { useAuth } from "@/contexts/auth-context";
 
 interface NavMenuProps {
   isOpen: boolean;
@@ -12,9 +13,15 @@ interface NavMenuProps {
 
 export default function NavMenu({ isOpen, onClose }: NavMenuProps) {
   const { theme, setTheme } = useTheme();
+  const { logout } = useAuth();
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light");
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    onClose();
   };
 
   return (
@@ -32,9 +39,17 @@ export default function NavMenu({ isOpen, onClose }: NavMenuProps) {
       classNames={{ wrapper: "items-center justify-center" }}
     >
       <DrawerContent>
-        <DrawerBody>
+        <DrawerBody className="flex flex-row gap-2 justify-center">
           <Button isIconOnly variant="faded" onPress={toggleTheme}>
             {theme === "light" ? <FaMoon /> : <FaSun />}
+          </Button>
+          <Button
+            isIconOnly
+            variant="faded"
+            color="danger"
+            onPress={handleLogout}
+          >
+            <FaSignOutAlt />
           </Button>
         </DrawerBody>
       </DrawerContent>
