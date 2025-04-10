@@ -5,6 +5,7 @@ import React from "react";
 import { useTheme } from "next-themes";
 import clsx from "clsx";
 import { useAuth } from "@/contexts/auth-context";
+import LanguageSelector from "../language-selector";
 
 interface NavMenuProps {
   isOpen: boolean;
@@ -51,6 +52,7 @@ export default function NavMenu({ isOpen, onClose }: NavMenuProps) {
           >
             <FaSignOutAlt />
           </Button>
+          <LanguageSelector />
         </DrawerBody>
       </DrawerContent>
     </Drawer>

@@ -1,4 +1,4 @@
-import { Button as HeroButton } from "@heroui/button";
+import { ButtonProps, Button as HeroButton } from "@heroui/button";
 import { tv } from "tailwind-variants";
 import React from "react";
 
@@ -15,12 +15,6 @@ const buttonStyles = tv({
     size: "md",
   },
 });
-
-export interface ButtonProps extends React.ComponentProps<typeof HeroButton> {
-  children: React.ReactNode;
-  className?: string;
-  size?: "sm" | "md" | "lg";
-}
 
 export const Button = ({
   children,

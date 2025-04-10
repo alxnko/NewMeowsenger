@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ChatProvider } from "@/contexts/chat-context";
-import { LanguageProvider } from "@/components/language-provider";
+import { LanguageProvider } from "@/contexts/language-context";
 
 export interface ProvidersProps {
   children: React.ReactNode;

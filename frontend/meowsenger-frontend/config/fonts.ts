@@ -1,4 +1,4 @@
-import { Inter as FontSans, Space_Mono as FontMono } from "next/font/google";
+import { Inter as FontSans, IBM_Plex_Mono as FontMono } from "next/font/google";
 
 export const fontSans = FontSans({
   subsets: ["latin"],
@@ -6,7 +6,7 @@ export const fontSans = FontSans({
 });
 
 export const fontMono = FontMono({
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic-ext"],
   variable: "--font-mono",
   weight: ["400", "700"],
 });

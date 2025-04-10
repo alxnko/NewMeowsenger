@@ -2,7 +2,6 @@ import React from "react";
 import { tv } from "tailwind-variants";
 import Link from "next/link";
 import { formatDistance } from "date-fns";
-import { useTranslation } from "../../../i18n";
 
 const chatItemStyles = tv({
   base: "flex items-center p-3 rounded-lg transition-all hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer lowercase",
@@ -36,19 +35,13 @@ export const ChatItem = ({
   active = false,
   className,
 }: ChatItemProps) => {
-  const { t } = useTranslation();
-  
-  // Format time with the current locale
   const formattedTime = timestamp
     ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
     : "";
 
-  // Get translated chat type (group or user)
-  const chatType = isGroup ? t('chat.group') : t('chat.user');
-
   return (
     <Link
-      href={`/chats/${chatType}/${id}`}
+      href={`/chats/${isGroup ? "group" : "user"}/${id}`}
       className={chatItemStyles({ active, className })}
     >
       <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-200 flex items-center justify-center text-green-800">
@@ -61,7 +54,7 @@ export const ChatItem = ({
           </p>
           {timestamp && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              {t('chat.timeAgo', { timeAgo: formattedTime })}
+              {formattedTime}
             </p>
           )}
         </div>

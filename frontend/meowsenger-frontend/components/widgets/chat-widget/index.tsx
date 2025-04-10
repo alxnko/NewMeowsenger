@@ -2,6 +2,7 @@ import { useState, ReactNode } from "react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import { ChatDetails, ChatMessage } from "@/contexts/chat-context";
 import Button from "@/components/elements/button";
 import Input from "@/components/elements/input";
@@ -26,6 +27,7 @@ export default function ChatWidget({
   headerContent,
 }: ChatWidgetProps) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [message, setMessage] = useState("");
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -39,7 +41,7 @@ export default function ChatWidget({
   if (loading) {
     return (
       <div className="flex justify-center py-10 lowercase text-muted-foreground">
-        loading conversation...
+        {t("loading_conversation")}
       </div>
     );
   }
@@ -49,7 +51,7 @@ export default function ChatWidget({
       <div className="text-center py-10">
         <p className="text-red-500 mb-4 lowercase">{error}</p>
         <Button as={Link} href={backUrl} variant="ghost" size="sm">
-          back to chats
+          {t("back_to_chats")}
         </Button>
       </div>
     );
@@ -59,10 +61,10 @@ export default function ChatWidget({
     return (
       <div className="text-center py-10">
         <p className="mb-4 lowercase text-muted-foreground">
-          conversation not found or you don't have access.
+          {t("conversation_not_found")}
         </p>
         <Button as={Link} href={backUrl} variant="ghost" size="sm">
-          back to chats
+          {t("back_to_chats")}
         </Button>
       </div>
     );
@@ -80,7 +82,7 @@ export default function ChatWidget({
             size="sm"
             className="py-1"
           >
-            ← back
+            ← {t("back")}
           </Button>
           <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center text-success font-medium">
             {chat.name[0].toLowerCase()}
@@ -96,20 +98,19 @@ export default function ChatWidget({
                 )}
               </div>
               <p className="text-sm text-muted-foreground lowercase">
-                {chat.isAdmin ? "admin" : ""}
+                {chat.isAdmin ? t("admin") : ""}
                 {chat.isTester && chat.isAdmin ? " • " : ""}
-                {chat.isTester ? "tester" : ""}
+                {chat.isTester ? t("tester") : ""}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 p-4 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground lowercase">
-            no messages yet. start the conversation!
+            {t("no_messages")}
           </div>
         ) : (
           <div className="space-y-4">
@@ -139,7 +140,7 @@ export default function ChatWidget({
                   <div className="break-words lowercase">
                     {msg.isDeleted ? (
                       <span className="italic text-muted-foreground">
-                        this message was deleted
+                        {t("this_message_was_deleted")}
                       </span>
                     ) : (
                       msg.text
@@ -150,7 +151,7 @@ export default function ChatWidget({
                       addSuffix: true,
                     })}
                     {msg.isEdited && (
-                      <span className="ml-1 italic">(edited)</span>
+                      <span className="ml-1 italic">({t("edited")})</span>
                     )}
                   </div>
                 </div>
@@ -166,7 +167,7 @@ export default function ChatWidget({
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="type a message..."
+            placeholder={t("type_a_message")}
             className="flex-1"
             color="success"
             variant="bordered"
@@ -177,7 +178,7 @@ export default function ChatWidget({
             color="success"
             size="md"
           >
-            send
+            {t("send")}
           </Button>
         </form>
       </div>
