@@ -65,6 +65,7 @@ export async function apiFetch<T = any>(
     method,
     headers,
     credentials: "include",
+    mode: "cors", // Explicitly set CORS mode
   };
 
   if (body) {
