@@ -7,3 +7,67 @@
   --font-sans: "Inter", sans-serif;
   --font-mono: "Space Mono", monospace;
 }
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4caf50;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #388e3c;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4caf50 #f1f1f1;
+}
+
+/* Dark mode scrollbar using Tailwind's dark mode */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-track {
+    background: #1f2937; /* dark:bg-gray-800 equivalent */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #10b981; /* dark:bg-emerald-500 equivalent */
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #059669; /* dark:bg-emerald-600 equivalent */
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-color: #10b981 #1f2937;
+  }
+}
+
+/* Support for class-based dark mode */
+.dark ::-webkit-scrollbar-track {
+  background: #232323;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #10b981;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
+/* For Firefox in class-based dark mode */
+.dark * {
+  scrollbar-color: #10b981 #232323;
+}

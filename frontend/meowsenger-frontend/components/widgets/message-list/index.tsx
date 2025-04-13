@@ -6,7 +6,7 @@ import { Button } from "@/components/elements/button";
 import { ChatMessage } from "@/contexts/chat-context";
 
 const messageListStyles = tv({
-  base: "flex flex-col h-full",
+  base: "flex flex-col max-h-[calc(100dvh-90px)]",
 });
 
 export interface MessageData {
@@ -162,7 +162,7 @@ export const MessageList = ({
         </div>
       )}
 
-      <div className="p-3 border-t dark:border-neutral-800">
+      <div className="pt-3 border-t dark:border-neutral-800">
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Input
             value={newMessage}
