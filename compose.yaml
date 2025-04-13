@@ -13,6 +13,9 @@ services:
       - ./frontend/meowsenger-frontend/.env
     networks:
       - meowsenger-network
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=http://localhost:8080/ws
 
   backend:
     build:
@@ -26,11 +29,29 @@ services:
       - ./backend/.env
     environment:
       - DB_HOST=db # Explicitly set this to override .env file in Docker environment
+      - DEBUG=True
+      - SECRET_KEY=your-secret-key
+      - DATABASE_URL=sqlite:///db.sqlite3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - meowsenger-network
+
+  websocket:
+    build:
+      context: ./messaging
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./messaging:/app
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SERVER_PORT=8081
+    depends_on:
+      - backend
     networks:
       - meowsenger-network
 

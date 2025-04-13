@@ -9,6 +9,7 @@ import { Button } from "@/components/elements/button";
 import CreateChatModal from "@/components/widgets/create-chat-modal";
 import { Toast } from "@/components/elements/toast";
 import { ProtectedRoute } from "@/components/elements/protected-route";
+import WebSocketStatus from "@/components/elements/websocket-status";
 
 export default function ChatsPage() {
   const router = useRouter();
@@ -49,6 +50,7 @@ export default function ChatsPage() {
     lastMessage: chat.lastMessage?.text,
     timestamp: new Date(chat.lastUpdate),
     isGroup: chat.isGroup,
+    isUnread: chat.isUnread,
   }));
 
   const handleSearch = (query: string) => {
@@ -124,7 +126,10 @@ export default function ChatsPage() {
     <ProtectedRoute authRequired={true}>
       <div className="flex flex-col h-screen">
         <div className="flex justify-between items-center p-4 border-b dark:border-neutral-800">
-          <h1 className="text-2xl font-medium">chats</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-medium">chats</h1>
+            <WebSocketStatus size="sm" />
+          </div>
           <Button onClick={handleCreateChat} variant="flat" size="sm">
             new chat
           </Button>

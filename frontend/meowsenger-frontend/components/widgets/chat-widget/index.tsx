@@ -6,13 +6,18 @@ import { useLanguage } from "@/contexts/language-context";
 import { ChatDetails, ChatMessage } from "@/contexts/chat-context";
 import Button from "@/components/elements/button";
 import Input from "@/components/elements/input";
+import MessageList from "@/components/widgets/message-list";
+import WebSocketStatus from "@/components/elements/websocket-status";
 
 export interface ChatWidgetProps {
   chat: ChatDetails | null;
   messages: ChatMessage[];
   loading: boolean;
   error: string | null;
-  onSendMessage: (message: string) => Promise<void>;
+  onSendMessage: (message: string, replyToId?: number) => Promise<void>;
+  onMarkAsRead: (messageId: number) => void;
+  currentUserId: number;
+  isConnected?: boolean;
   backUrl?: string;
   headerContent?: ReactNode;
 }
@@ -23,20 +28,14 @@ export default function ChatWidget({
   loading,
   error,
   onSendMessage,
+  onMarkAsRead,
+  currentUserId,
+  isConnected = true,
   backUrl = "/chats",
   headerContent,
 }: ChatWidgetProps) {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const [message, setMessage] = useState("");
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (message.trim()) {
-      await onSendMessage(message);
-      setMessage("");
-    }
-  };
 
   if (loading) {
     return (
@@ -105,82 +104,21 @@ export default function ChatWidget({
             </div>
           )}
         </div>
+
+        {/* Connection status indicator */}
+        <WebSocketStatus showText={true} size="sm" />
       </div>
 
-      <div className="flex-1 p-4 overflow-y-auto">
-        {messages.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground lowercase">
-            {t("no_messages")}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${
-                  msg.author === user?.username
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[70%] p-3 rounded-lg ${
-                    msg.isSystem
-                      ? "bg-neutral-100 dark:bg-neutral-800 italic text-center mx-auto"
-                      : msg.author === user?.username
-                        ? "bg-success text-white"
-                        : "bg-neutral-100 dark:bg-neutral-800"
-                  }`}
-                >
-                  {!msg.isSystem && msg.author !== user?.username && (
-                    <div className="text-xs text-muted-foreground mb-1 lowercase">
-                      {msg.author}
-                    </div>
-                  )}
-                  <div className="break-words lowercase">
-                    {msg.isDeleted ? (
-                      <span className="italic text-muted-foreground">
-                        {t("this_message_was_deleted")}
-                      </span>
-                    ) : (
-                      msg.text
-                    )}
-                  </div>
-                  <div className="text-xs text-right mt-1 opacity-70 lowercase">
-                    {formatDistanceToNow(new Date(msg.time * 1000), {
-                      addSuffix: true,
-                    })}
-                    {msg.isEdited && (
-                      <span className="ml-1 italic">({t("edited")})</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="pt-4">
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <Input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={t("type_a_message")}
-            className="flex-1"
-            color="success"
-            variant="bordered"
-          />
-          <Button
-            type="submit"
-            disabled={!message.trim()}
-            color="success"
-            size="md"
-          >
-            {t("send")}
-          </Button>
-        </form>
+      {/* Message list */}
+      <div className="flex-1">
+        <MessageList
+          messages={messages}
+          currentUserId={currentUserId}
+          onSendMessage={onSendMessage}
+          onMarkAsRead={onMarkAsRead}
+          isConnected={isConnected}
+          className="h-full"
+        />
       </div>
     </div>
   );

@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useChat } from "@/contexts/chat-context";
 import { useAuth } from "@/contexts/auth-context";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import ChatWidget from "@/components/widgets/chat-widget";
 import Button from "@/components/elements/button";
 import Link from "next/link";
 
 export default function GroupChatPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const {
     openChat,
     currentChat,
@@ -17,16 +18,41 @@ export default function GroupChatPage() {
     loading,
     error,
     sendMessage,
+    markMessageAsRead,
   } = useChat();
-  const { user } = useAuth();
-  const router = useRouter();
+
+  // Track WebSocket connection status
+  const [isConnected, setIsConnected] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
 
   useEffect(() => {
+    // Set connected status from WebSocket context
+    const wsStatus = sessionStorage.getItem("ws_connected");
+    setIsConnected(wsStatus === "true");
+
+    // Listen for WebSocket connection status changes
+    const handleConnectionChange = (event: StorageEvent) => {
+      if (event.key === "ws_connected") {
+        setIsConnected(event.newValue === "true");
+      }
+    };
+
+    window.addEventListener("storage", handleConnectionChange);
+    return () => window.removeEventListener("storage", handleConnectionChange);
+  }, []);
+
+  useEffect(() => {
     if (id) {
-      openChat(Number(id));
+      const groupId = parseInt(id as string);
+      if (!isNaN(groupId)) {
+        openChat(groupId);
+      }
     }
   }, [id]);
+
+  if (!user) {
+    return <div className="p-4">Please log in to view this chat.</div>;
+  }
 
   // Custom header content for group chats
   const groupHeaderContent = currentChat ? (
@@ -80,6 +106,9 @@ export default function GroupChatPage() {
       loading={loading}
       error={error}
       onSendMessage={sendMessage}
+      onMarkAsRead={markMessageAsRead}
+      currentUserId={user.id}
+      isConnected={isConnected}
       headerContent={groupHeaderContent}
     />
   );
