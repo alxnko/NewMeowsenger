@@ -10,6 +10,7 @@ class User(AbstractUser):
     Extends the Django AbstractUser to include additional fields.
     """
 
+    # Django's AbstractUser will use BigAutoField by default in newer versions
     description = models.CharField(max_length=20, default="default")
     image_file = models.CharField(max_length=20, default="default")
     rank = models.CharField(max_length=20, null=True, blank=True)
@@ -25,7 +26,7 @@ class User(AbstractUser):
 
 
 class Chat(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)  # Changed from AutoField to BigAutoField
     is_group = models.BooleanField(default=False)
     name = models.CharField(max_length=20)
     description = models.TextField(default="meowsenger group")
@@ -40,7 +41,7 @@ class Chat(models.Model):
 
 
 class Message(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)  # Changed from AutoField to BigAutoField
     text = models.TextField()
     is_deleted = models.BooleanField(default=False)
     is_edited = models.BooleanField(default=False)
@@ -48,7 +49,9 @@ class Message(models.Model):
     send_time = models.DateTimeField(default=datetime.now)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
-    reply_to = models.IntegerField(null=True, blank=True)
+    reply_to = models.BigIntegerField(
+        null=True, blank=True
+    )  # Changed from IntegerField to BigIntegerField
     is_forwarded = models.BooleanField(default=False)
     unread_by = models.ManyToManyField(
         User, through="UserMessage", related_name="unread"
@@ -59,7 +62,7 @@ class Message(models.Model):
 
 
 class Update(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)  # Changed from AutoField to BigAutoField
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="updates")
     message = models.ForeignKey(
         Message, on_delete=models.CASCADE, related_name="updates"
@@ -71,7 +74,7 @@ class Update(models.Model):
 
 
 class Notify(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)  # Changed from AutoField to BigAutoField
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifies")
     subscription = models.TextField()
 

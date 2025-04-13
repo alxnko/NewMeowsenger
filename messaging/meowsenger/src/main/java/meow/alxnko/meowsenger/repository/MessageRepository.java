@@ -8,9 +8,9 @@ import meow.alxnko.meowsenger.model.Message;
 import java.util.List;
 
 @Repository
-public interface MessageRepository extends JpaRepository<Message, Integer> { // Changed from Long to Integer
+public interface MessageRepository extends JpaRepository<Message, Long> {
     
-    List<Message> findByChatIdOrderBySendTimeDesc(Integer chatId); // Changed from Long to Integer
+    List<Message> findByChatIdOrderBySendTimeDesc(Long chatId);
     
-    List<Message> findByUserIdOrderBySendTimeDesc(Integer userId); // Changed from Long to Integer
+    List<Message> findByUserIdOrderBySendTimeDesc(Long userId);
 }

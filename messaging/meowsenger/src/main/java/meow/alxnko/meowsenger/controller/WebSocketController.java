@@ -44,9 +44,9 @@ public class WebSocketController {
      * Handle batch subscription to multiple chats
      */
     @MessageMapping("/chats.subscribe")
-    public Map<Integer, WebSocketMessage> subscribeToMultipleChats(@Payload List<Integer> chatIds, SimpMessageHeaderAccessor headerAccessor) { // Changed from Long to Integer
+    public Map<Long, WebSocketMessage> subscribeToMultipleChats(@Payload List<Long> chatIds, SimpMessageHeaderAccessor headerAccessor) {
         String sessionId = headerAccessor.getSessionId();
-        Integer userId = webSocketService.getUserIdFromSession(sessionId); // Changed from Long to Integer
+        Long userId = webSocketService.getUserIdFromSession(sessionId);
         
         if (userId == null) {
             log.error("User not registered for session {}", sessionId);
