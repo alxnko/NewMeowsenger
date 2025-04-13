@@ -8,14 +8,14 @@ import org.springframework.stereotype.Repository;
 import meow.alxnko.meowsenger.model.Message;
 
 @Repository
-public interface ChatMessageRepository extends JpaRepository<Message, Integer> { // Changed from Long to Integer
+public interface ChatMessageRepository extends JpaRepository<Message, Long> {
     
     // Updated to use Message entity fields
-    List<Message> findByChatId(Integer chatId); // Changed from Long to Integer
+    List<Message> findByChatId(Long chatId);
     
     // Updated to use Message entity fields
-    List<Message> findByChatIdOrderBySendTimeDesc(Integer chatId); // Changed from Long to Integer
+    List<Message> findByChatIdOrderBySendTimeDesc(Long chatId);
     
     // Updated to use Message entity fields
-    List<Message> findByUserId(Integer userId); // Changed from Long to Integer
+    List<Message> findByUserId(Long userId);
 }
