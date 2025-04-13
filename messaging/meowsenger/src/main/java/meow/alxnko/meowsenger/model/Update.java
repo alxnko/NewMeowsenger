@@ -26,7 +26,7 @@ public class Update {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id; // Changed from Long to Integer to match Django's int4 type
+    private Long id; // Changed from Integer to Long
     
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "chat_id", nullable = false)

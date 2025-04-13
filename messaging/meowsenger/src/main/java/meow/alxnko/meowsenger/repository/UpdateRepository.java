@@ -8,9 +8,9 @@ import org.springframework.stereotype.Repository;
 import meow.alxnko.meowsenger.model.Update;
 
 @Repository
-public interface UpdateRepository extends JpaRepository<Update, Integer> { // Changed from Long to Integer
+public interface UpdateRepository extends JpaRepository<Update, Long> { // Changed from Integer to Long
     
-    List<Update> findByChatId(Integer chatId); // Changed from Long to Integer
+    List<Update> findByChatId(Long chatId); // Changed from Integer to Long
     
-    List<Update> findByMessageId(Integer messageId); // Changed from Long to Integer
+    List<Update> findByMessageId(Long messageId); // Changed from Integer to Long
 }

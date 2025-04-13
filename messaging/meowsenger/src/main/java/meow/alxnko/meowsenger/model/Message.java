@@ -16,17 +16,13 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@SecondaryTable(name = "user_message", pkJoinColumns = @PrimaryKeyJoinColumn(name = "msg_id"))
+@SecondaryTable(name = "user_message", pkJoinColumns = @PrimaryKeyJoinColumn(name = "id"))
 public class Message {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
-    private Integer id; // Changed from Long to Integer to match Django's int4 type
-    
-    // Adding attribute to match Django's custom column name in junction table
-    @AttributeOverride(name = "id", column = @Column(name = "msg_id", insertable = false, updatable = false))
-    private Integer msgId; // Changed from Long to Integer to match Django's int4 type
+    private Long id; // Changed from Integer to Long
     
     @Column(nullable = false, columnDefinition = "TEXT")
     private String text;
@@ -52,7 +48,7 @@ public class Message {
     private Chat chat;
     
     @Column(name = "reply_to")
-    private Integer replyTo;
+    private Long replyTo; // Changed from Integer to Long
     
     @Column(name = "is_forwarded")
     private boolean isForwarded = false;
@@ -61,7 +57,7 @@ public class Message {
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "user_message",  // Match Django table name
-        joinColumns = @JoinColumn(name = "msg_id", referencedColumnName = "id"),  // Map to id field
+        joinColumns = @JoinColumn(name = "id", referencedColumnName = "id"),  // Map to id field
         inverseJoinColumns = @JoinColumn(name = "user_id")
     )
     private Set<User> unreadBy = new HashSet<>();
@@ -69,12 +65,4 @@ public class Message {
     // Just for reference, don't modify through Spring
     @OneToMany(mappedBy = "message", fetch = FetchType.LAZY)
     private Set<Update> updates = new HashSet<>();
-    
-    // Add lifecycle callback to ensure msgId equals id
-    @PostLoad
-    @PostPersist
-    @PostUpdate
-    private void setMsgId() {
-        this.msgId = this.id;
-    }
 }

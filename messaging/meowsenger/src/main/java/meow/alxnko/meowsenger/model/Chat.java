@@ -3,8 +3,11 @@ package meow.alxnko.meowsenger.model;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -12,7 +15,10 @@ import java.util.Set;
 
 @Entity
 @Table(name = "meowsenger_backend_chat") // Match Django table name
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"users", "admins", "messages", "updates"})
+@EqualsAndHashCode(of = "id")
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder

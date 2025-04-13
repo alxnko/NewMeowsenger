@@ -3,6 +3,7 @@ package meow.alxnko.meowsenger.service;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,25 +74,20 @@ public class WebSocketService {
     /**
      * Subscribe a user to a chat room
      */
+    @Transactional
     public WebSocketMessage subscribeUserToChat(Long chatId, Long userId, String sessionId) {
-        // Check if chat exists
-        Optional<Chat> chatOpt = chatRepository.findById(chatId);
-        if (chatOpt.isEmpty()) {
+        // First check if chat exists
+        if (!chatRepository.existsById(chatId)) {
             return createErrorMessage("Chat not found");
         }
         
-        Chat chat = chatOpt.get();
-        
         // Check if user exists
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isEmpty()) {
+        if (!userRepository.existsById(userId)) {
             return createErrorMessage("User not found");
         }
         
-        User user = userOpt.get();
-        
-        // Check if user is member of the chat
-        if (!chat.getUsers().contains(user)) {
+        // Check if user is member of the chat with direct query
+        if (!chatRepository.isUserInChat(chatId, userId)) {
             return createErrorMessage("User is not a member of this chat");
         }
         
@@ -113,28 +109,23 @@ public class WebSocketService {
     /**
      * Process and save a new chat message, then broadcast it to all users in the chat
      */
+    @Transactional
     public WebSocketMessage processAndSendMessage(WebSocketMessage message) {
         Long chatId = message.getChatId();
         Long userId = message.getUserId();
         
-        // Verify chat exists
-        Optional<Chat> chatOpt = chatRepository.findById(chatId);
-        if (chatOpt.isEmpty()) {
+        // Check if chat exists
+        if (!chatRepository.existsById(chatId)) {
             return createErrorMessage("Chat not found");
         }
         
-        Chat chat = chatOpt.get();
-        
-        // Verify user exists
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isEmpty()) {
+        // Check if user exists
+        if (!userRepository.existsById(userId)) {
             return createErrorMessage("User not found");
         }
         
-        User user = userOpt.get();
-        
-        // Verify user is member of the chat
-        if (!chat.getUsers().contains(user)) {
+        // Check if user is member of the chat with direct query
+        if (!chatRepository.isUserInChat(chatId, userId)) {
             return createErrorMessage("User is not a member of this chat");
         }
         
@@ -163,6 +154,7 @@ public class WebSocketService {
     /**
      * Mark a message as read for a user
      */
+    @Transactional
     public void markMessageAsRead(Long messageId, Long userId) {
         try {
             messageService.markMessageAsRead(messageId, userId);

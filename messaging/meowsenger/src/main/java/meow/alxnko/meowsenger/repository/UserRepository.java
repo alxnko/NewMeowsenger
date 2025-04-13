@@ -8,7 +8,7 @@ import meow.alxnko.meowsenger.model.User;
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Integer> { // Changed from Long to Integer
+public interface UserRepository extends JpaRepository<User, Long> { // Changed from Integer to Long
     
     Optional<User> findByUsername(String username);
 }
