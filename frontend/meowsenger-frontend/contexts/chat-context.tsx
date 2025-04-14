@@ -9,6 +9,7 @@ import {
 import { useAuth } from "./auth-context";
 import { chatApi, GroupResponse } from "@/utils/api-client";
 import websocketService, { WebSocketMessage } from "@/utils/websocket-service";
+import { useToast } from "./toast-context";
 
 // Chat types
 export interface ChatMessage {
@@ -66,6 +67,7 @@ interface ChatContextType {
   currentMessages: ChatMessage[];
   loading: boolean;
   error: string | null;
+  typingUsers: { userId: number; username: string }[];
   fetchChats: () => Promise<void>;
   openChat: (chatId: string | number) => Promise<void>;
   createGroup: (name: string) => Promise<GroupResponse | undefined>;
@@ -78,7 +80,10 @@ interface ChatContextType {
     message: string
   ) => Promise<void>;
   sendMessage: (text: string, replyTo?: number) => Promise<void>;
+  editMessage: (messageId: number, newText: string) => Promise<void>;
+  deleteMessage: (messageId: number) => Promise<void>;
   markMessageAsRead: (messageId: number) => void;
+  sendTypingIndicator: (chatId: number) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -92,6 +97,45 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState(0);
   const [wsConnected, setWsConnected] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<
+    { userId: number; username: string }[]
+  >([]);
+  // Track recent join/leave events to prevent duplicates
+  const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
+    new Map()
+  );
+  const { showToast } = useToast();
+
+  // Clean up old join events periodically (every 30 seconds)
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const newMap = new Map(recentJoinEvents);
+      let changed = false;
+
+      // Remove entries older than 10 seconds
+      Array.from(newMap.entries()).forEach(([key, timestamp]) => {
+        if (now - timestamp > 10000) {
+          newMap.delete(key);
+          changed = true;
+        }
+      });
+
+      // Only update state if something changed
+      if (changed) {
+        setRecentJoinEvents(newMap);
+      }
+    }, 30000);
+
+    return () => clearInterval(cleanupInterval);
+  }, [recentJoinEvents]);
+
+  // Show errors as toasts when they change
+  useEffect(() => {
+    if (error) {
+      showToast(error, "error");
+    }
+  }, [error, showToast]);
 
   // Connect to WebSocket when user is authenticated
   useEffect(() => {
@@ -138,23 +182,91 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [token, user, wsConnected]);
 
   // Handle WebSocket messages for the current chat
-  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
-    if (message.type === "CHAT") {
-      // Convert WebSocket message to UI message format
-      const newMessage: ChatMessage = {
-        id: message.messageId || Date.now(),
-        text: message.content,
-        author: message.userId.toString(), // We'll need to fetch the username
-        time: new Date(message.timestamp).getTime() / 1000, // Convert to seconds
-        isDeleted: false,
-        isEdited: false,
-        isSystem: false,
-        isForwarded: false,
-      };
+  const handleWebSocketMessage = useCallback(
+    (message: WebSocketMessage) => {
+      if (message.type === "CHAT") {
+        // Convert WebSocket message to UI message format with all the enhanced data
+        const newMessage: ChatMessage = {
+          id: message.messageId || Date.now(),
+          text: message.content,
+          author: message.username || message.userId.toString(),
+          time: new Date(message.timestamp).getTime() / 1000, // Convert to seconds
+          isDeleted: message.isDeleted || false,
+          isEdited: message.isEdited || false,
+          isSystem: message.isSystem || false,
+          isForwarded: message.isForwarded || false,
+          replyTo: message.replyTo,
+          isRead: message.isRead || false,
+          isPending: false, // Messages from WebSocket are confirmed
+        };
 
-      setCurrentMessages((prevMessages) => [...prevMessages, newMessage]);
-    }
-  }, []);
+        // Handle message updates (edits/deletes) by replacing the existing message
+        if (message.messageId) {
+          setCurrentMessages((prevMessages) => {
+            // Check if this is an existing message being updated (edit/delete)
+            const messageExists = prevMessages.some(
+              (msg) => msg.id === message.messageId
+            );
+
+            if (messageExists) {
+              // If the message exists, replace it with the updated version
+              return prevMessages.map((msg) =>
+                msg.id === message.messageId ? newMessage : msg
+              );
+            } else {
+              // Check if this is a confirmation of a pending message we sent
+              // Look for a pending message with matching content sent by the current user
+              const pendingMessageIndex = prevMessages.findIndex(
+                (msg) =>
+                  msg.isPending &&
+                  msg.text === message.content &&
+                  msg.author === user?.username
+              );
+
+              if (pendingMessageIndex !== -1) {
+                // Replace the pending message with the confirmed one from server
+                const updatedMessages = [...prevMessages];
+                updatedMessages[pendingMessageIndex] = newMessage;
+                return updatedMessages;
+              }
+
+              // If it's a completely new message, add it to the list
+              return [...prevMessages, newMessage];
+            }
+          });
+        } else {
+          // Handle new messages (without an ID yet)
+          setCurrentMessages((prevMessages) => [...prevMessages, newMessage]);
+        }
+      } else if (message.type === "TYPING") {
+        // Handle typing indicator
+        setTypingUsers((prev) => {
+          const userExists = prev.some(
+            (user) => user.userId === message.userId
+          );
+          if (userExists) {
+            return prev;
+          } else {
+            return [
+              ...prev,
+              {
+                userId: message.userId,
+                username: message.username || message.userId.toString(),
+              },
+            ];
+          }
+        });
+
+        // Remove typing indicator after a delay
+        setTimeout(() => {
+          setTypingUsers((prev) =>
+            prev.filter((user) => user.userId !== message.userId)
+          );
+        }, 3000); // Adjust the delay as needed
+      }
+    },
+    [user?.username]
+  );
 
   // Subscribe to current chat WebSocket updates
   useEffect(() => {
@@ -172,7 +284,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         websocketService.unsubscribeFromChatRoom(currentChat.id);
       }
     };
-  }, [currentChat, wsConnected, user, handleWebSocketMessage]);
+  }, [currentChat, wsConnected, user]);
 
   // Subscribe to all chats for notifications
   useEffect(() => {
@@ -443,10 +555,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       setCurrentMessages((prev) => [...prev, optimisticMessage]);
 
+      // Ensure WebSocket connection is established with the correct user ID
+      const isConnected = await websocketService.ensureConnected(
+        user.id,
+        token
+      );
+
       // Send via WebSocket if connected
-      if (wsConnected) {
-        websocketService.sendChatMessage(currentChat.id, text);
+      if (isConnected) {
+        console.log(`Sending message via WebSocket to chat ${currentChat.id}`);
+        if (replyTo) {
+          // Use the reply-specific method if replying to a message
+          websocketService.sendReplyMessage(currentChat.id, text, replyTo);
+        } else {
+          // Regular message send
+          websocketService.sendChatMessage(currentChat.id, text);
+        }
       } else {
+        console.log("WebSocket not connected, falling back to REST API");
         // Fall back to REST API if WebSocket not connected
         const to = currentChat.isGroup ? currentChat.id : currentChat.name;
         await chatApi.sendMessage(token, to, text, replyTo);
@@ -469,6 +595,91 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   };
+
+  const editMessage = async (messageId: number, newText: string) => {
+    if (!currentChat || !user || !token) return;
+
+    try {
+      // Optimistically update the message in the UI
+      setCurrentMessages((prevMessages) =>
+        prevMessages.map((msg) => {
+          if (msg.id === messageId) {
+            return {
+              ...msg,
+              text: newText,
+              isEdited: true,
+            };
+          }
+          return msg;
+        })
+      );
+
+      // Ensure WebSocket connection is established with the correct user ID
+      const isConnected = await websocketService.ensureConnected(
+        user.id,
+        token
+      );
+
+      if (isConnected) {
+        console.log(`Editing message ${messageId} via WebSocket`);
+        // Send the edit via WebSocket
+        websocketService.editMessage(messageId, currentChat.id, newText);
+      } else {
+        console.warn("WebSocket not connected, edit may not be synchronized");
+        // Could implement a REST API fallback for edits here
+      }
+    } catch (error) {
+      setError("Failed to edit message");
+      console.error("Error editing message:", error);
+    }
+  };
+
+  const deleteMessage = async (messageId: number) => {
+    if (!currentChat || !user || !token) return;
+
+    try {
+      // Optimistically update the message in the UI
+      setCurrentMessages((prevMessages) =>
+        prevMessages.map((msg) => {
+          if (msg.id === messageId) {
+            return {
+              ...msg,
+              text: "This message was deleted",
+              isDeleted: true,
+            };
+          }
+          return msg;
+        })
+      );
+
+      // Ensure WebSocket connection is established with the correct user ID
+      const isConnected = await websocketService.ensureConnected(
+        user.id,
+        token
+      );
+
+      if (isConnected) {
+        console.log(`Deleting message ${messageId} via WebSocket`);
+        // Send the delete via WebSocket
+        websocketService.deleteMessage(messageId, currentChat.id);
+      } else {
+        console.warn("WebSocket not connected, delete may not be synchronized");
+        // Could implement a REST API fallback for deletes here
+      }
+    } catch (error) {
+      setError("Failed to delete message");
+      console.error("Error deleting message:", error);
+    }
+  };
+
+  // Send typing indicator when user is typing
+  const sendTypingIndicator = useCallback(
+    (chatId: number) => {
+      if (!wsConnected) return;
+      websocketService.sendTypingIndicator(chatId);
+    },
+    [wsConnected]
+  );
 
   const markMessageAsRead = (messageId: number) => {
     if (!wsConnected || !user) return;
@@ -494,6 +705,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         currentMessages,
         loading,
         error,
+        typingUsers,
         fetchChats,
         openChat,
         createGroup,
@@ -502,7 +714,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         leaveGroup,
         saveSettings,
         sendMessage,
+        editMessage,
+        deleteMessage,
         markMessageAsRead,
+        sendTypingIndicator,
       }}
     >
       {children}

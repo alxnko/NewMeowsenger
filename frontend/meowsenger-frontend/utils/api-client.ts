@@ -3,6 +3,9 @@ import { ChatBlock, ChatDetails, ChatMessage } from "@/contexts/chat-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Create a custom event for handling auth errors
+export const AUTH_ERROR_EVENT = "auth_token_invalid";
+
 interface ApiOptions {
   method?: string;
   headers?: HeadersInit;
@@ -79,6 +82,14 @@ export async function apiFetch<T = any>(
       const errorData = await response.json().catch(() => ({}));
       // Log the full error response for debugging
       console.log("API Error Details:", errorData);
+
+      // Handle 401 Unauthorized responses by dispatching an auth error event
+      if (response.status === 401 && token) {
+        console.log("Auth token invalid, triggering logout");
+        // Dispatch a custom event to trigger logout
+        window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
+        throw new Error("Authentication failed. Please log in again.");
+      }
 
       // Format error message with more details
       let errorMessage = `API error: ${response.status}`;

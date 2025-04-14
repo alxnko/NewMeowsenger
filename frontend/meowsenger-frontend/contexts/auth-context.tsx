@@ -6,7 +6,8 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { authApi, AuthResponse } from "@/utils/api-client";
+import { authApi, AuthResponse, AUTH_ERROR_EVENT } from "@/utils/api-client";
+import { useToast } from "./toast-context";
 
 export interface User {
   id: number;
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [validationErrors, setValidationErrors] =
     useState<ValidationErrors | null>(null);
   const router = useRouter();
+  const { showToast } = useToast();
 
   // Load user from localStorage on initial mount
   useEffect(() => {
@@ -74,6 +76,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setLoading(false);
   }, []);
+
+  // Add event listener for auth token invalid events
+  useEffect(() => {
+    const handleAuthError = () => {
+      const errorMsg = "Authentication expired. Please log in again.";
+      setError(errorMsg);
+      showToast(errorMsg, "error");
+      logout();
+    };
+
+    // Add event listener for AUTH_ERROR_EVENT
+    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
+
+    // Clean up on unmount
+    return () => {
+      window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
+    };
+  }, []);
+
+  // Show errors as toasts when they change
+  useEffect(() => {
+    if (error) {
+      showToast(error, "error");
+    }
+  }, [error, showToast]);
 
   // Only clear errors manually, not automatically
   const clearErrors = () => {

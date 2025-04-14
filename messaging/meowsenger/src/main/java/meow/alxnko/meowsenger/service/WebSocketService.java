@@ -1,5 +1,6 @@
 package meow.alxnko.meowsenger.service;
 
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -7,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import meow.alxnko.meowsenger.config.UserChannelInterceptor;
+import meow.alxnko.meowsenger.config.UserChannelInterceptor.WebSocketDisconnectEvent;
 import meow.alxnko.meowsenger.model.Chat;
 import meow.alxnko.meowsenger.model.Message;
 import meow.alxnko.meowsenger.model.User;
@@ -29,17 +32,22 @@ public class WebSocketService {
     private final ChatRepository chatRepository;
     private final UserRepository userRepository;
     private final MessageService messageService;
+    private final UserChannelInterceptor userChannelInterceptor;
     
     // Map to track active user sessions
     private final Map<String, Long> sessionUserMap = new ConcurrentHashMap<>();
     // Map to track which users are in which chat rooms
     private final Map<Long, Map<Long, String>> userChatSessions = new ConcurrentHashMap<>();
+    // Map to track typing status
+    private final Map<Long, Map<Long, LocalDateTime>> userTypingStatus = new ConcurrentHashMap<>();
     
     /**
      * Register a new WebSocket session for a user
      */
     public void registerUserSession(String sessionId, Long userId) {
         sessionUserMap.put(sessionId, userId);
+        // Set the principal in the interceptor for user-specific messaging
+        userChannelInterceptor.setUserPrincipal(sessionId, userId);
         log.info("User {} connected with session {}", userId, sessionId);
     }
     
@@ -48,6 +56,14 @@ public class WebSocketService {
      */
     public Long getUserIdFromSession(String sessionId) {
         return sessionUserMap.get(sessionId);
+    }
+    
+    /**
+     * Handle disconnection events from UserChannelInterceptor
+     */
+    @EventListener
+    public void handleWebSocketDisconnectEvent(WebSocketDisconnectEvent event) {
+        removeUserSession(event.getSessionId());
     }
     
     /**
@@ -77,12 +93,16 @@ public class WebSocketService {
     @Transactional
     public WebSocketMessage subscribeUserToChat(Long chatId, Long userId, String sessionId) {
         // First check if chat exists
-        if (!chatRepository.existsById(chatId)) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElse(null);
+        if (chat == null) {
             return createErrorMessage("Chat not found");
         }
         
         // Check if user exists
-        if (!userRepository.existsById(userId)) {
+        User user = userRepository.findById(userId)
+                .orElse(null);
+        if (user == null) {
             return createErrorMessage("User not found");
         }
         
@@ -96,57 +116,79 @@ public class WebSocketService {
         
         log.info("User {} subscribed to chat {}", userId, chatId);
         
-        // Create and return a success message
-        return WebSocketMessage.builder()
+        // Create a subscription confirmation message - but don't broadcast it
+        WebSocketMessage confirmationMessage = WebSocketMessage.builder()
                 .type(WebSocketMessage.MessageType.JOIN)
                 .userId(userId)
                 .chatId(chatId)
-                .content("User joined the chat")
+                .username(user.getUsername())
+                .content("User subscribed to chat")
                 .timestamp(LocalDateTime.now())
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
                 .build();
+                
+        // Return the confirmation without broadcasting to other users
+        return confirmationMessage;
     }
     
     /**
      * Process and save a new chat message, then broadcast it to all users in the chat
+     * except the sender
      */
     @Transactional
-    public WebSocketMessage processAndSendMessage(WebSocketMessage message) {
-        Long chatId = message.getChatId();
-        Long userId = message.getUserId();
+    public WebSocketMessage processAndSendMessage(WebSocketMessage inputMessage) {
+        Long chatId = inputMessage.getChatId();
+        Long userId = inputMessage.getUserId();
+        String content = inputMessage.getContent();
+        Long replyToId = inputMessage.getReplyTo();
         
         // Check if chat exists
-        if (!chatRepository.existsById(chatId)) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElse(null);
+        if (chat == null) {
             return createErrorMessage("Chat not found");
         }
         
         // Check if user exists
-        if (!userRepository.existsById(userId)) {
+        User user = userRepository.findById(userId)
+                .orElse(null);
+        if (user == null) {
             return createErrorMessage("User not found");
         }
         
-        // Check if user is member of the chat with direct query
+        // Check if user is member of the chat
         if (!chatRepository.isUserInChat(chatId, userId)) {
             return createErrorMessage("User is not a member of this chat");
         }
         
         // Save message to database
-        Message savedMessage = messageService.saveMessage(
-                message.getContent(), 
-                userId, 
-                chatId);
+        Message savedMessage = messageService.saveMessage(content, userId, chatId, replyToId);
         
-        // Build response with saved message ID
+        // Build response with complete message data
         WebSocketMessage responseMessage = WebSocketMessage.builder()
                 .type(WebSocketMessage.MessageType.CHAT)
                 .chatId(chatId)
                 .userId(userId)
-                .content(message.getContent())
+                .username(user.getUsername())
+                .content(content)
                 .messageId(savedMessage.getId())
                 .timestamp(savedMessage.getSendTime())
+                .isEdited(savedMessage.isEdited())
+                .isDeleted(savedMessage.isDeleted())
+                .isSystem(savedMessage.isSystem())
+                .replyTo(savedMessage.getReplyTo())
+                .isForwarded(savedMessage.isForwarded())
+                .isRead(false)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
                 .build();
         
-        // Send message to all users subscribed to the chat
-        messagingTemplate.convertAndSend("/topic/chat." + chatId, responseMessage);
+        // Get all users in this chat except the sender
+        sendMessageToOtherUsers(chatId, userId, responseMessage);
+        
+        // Clear typing status for this user
+        clearTypingStatus(chatId, userId);
         
         return responseMessage;
     }
@@ -157,22 +199,64 @@ public class WebSocketService {
     @Transactional
     public void markMessageAsRead(Long messageId, Long userId) {
         try {
-            messageService.markMessageAsRead(messageId, userId);
+            Message message = messageService.markMessageAsRead(messageId, userId);
+            if (message == null) {
+                log.error("Message {} not found when marking as read", messageId);
+                return;
+            }
             
-            // Notify other clients that the message has been read
+            // Get the message author
+            User author = message.getUser();
+            
+            // Notify the message author that their message has been read
             WebSocketMessage readNotification = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT)
+                    .type(WebSocketMessage.MessageType.READ)
                     .messageId(messageId)
                     .userId(userId)
-                    .content("Message read")
+                    .chatId(message.getChat().getId())
                     .timestamp(LocalDateTime.now())
+                    .isRead(true)
                     .build();
             
-            messagingTemplate.convertAndSend("/user/" + userId + "/queue/read-receipts", readNotification);
+            // Send read receipt to the author of the message
+            messagingTemplate.convertAndSend("/user/" + author.getId() + "/queue/read-receipts", readNotification);
             
             log.info("Message {} marked as read by user {}", messageId, userId);
         } catch (Exception e) {
             log.error("Error marking message as read: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Notify chat members that a user is typing
+     */
+    public void notifyTyping(Long chatId, Long userId) {
+        // Update typing status
+        userTypingStatus.computeIfAbsent(chatId, k -> new HashMap<>())
+                .put(userId, LocalDateTime.now());
+        
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) return;
+        
+        WebSocketMessage typingMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.TYPING)
+                .chatId(chatId)
+                .userId(userId)
+                .username(user.getUsername())
+                .timestamp(LocalDateTime.now())
+                .build();
+        
+        // Send typing notification to all users in the chat
+        messagingTemplate.convertAndSend("/topic/chat." + chatId + "/typing", typingMessage);
+    }
+    
+    /**
+     * Clear typing status for a user
+     */
+    private void clearTypingStatus(Long chatId, Long userId) {
+        Map<Long, LocalDateTime> chatTypingStatus = userTypingStatus.get(chatId);
+        if (chatTypingStatus != null) {
+            chatTypingStatus.remove(userId);
         }
     }
     
@@ -185,5 +269,72 @@ public class WebSocketService {
                 .content(errorMessage)
                 .timestamp(LocalDateTime.now())
                 .build();
+    }
+    
+    /**
+     * Send a message to all users in a chat except the sender
+     */
+    private void sendMessageToOtherUsers(Long chatId, Long senderId, WebSocketMessage message) {
+        Map<Long, String> chatUsers = userChatSessions.get(chatId);
+        if (chatUsers == null || chatUsers.isEmpty()) {
+            log.warn("No users found in chat {} to send message", chatId);
+            return;
+        }
+        
+        log.debug("Chat {} has {} users", chatId, chatUsers.size());
+        
+        // Send the message to each user in the chat except the sender
+        for (Long userId : chatUsers.keySet()) {
+            // Skip the sender
+            if (userId.equals(senderId)) {
+                log.debug("Skipping sender: {}", userId);
+                continue;
+            }
+            
+            log.debug("Sending message to user {} for chat {}", userId, chatId);
+            
+            try {
+                // Use both approaches to ensure delivery
+                // 1. User-specific messaging with convertAndSendToUser
+                messagingTemplate.convertAndSendToUser(
+                    userId.toString(),
+                    "/queue/chat." + chatId, 
+                    message
+                );
+                
+                // 2. Also try with broadcast to specific user's topic as fallback
+                messagingTemplate.convertAndSend(
+                    "/topic/user." + userId + ".chat." + chatId,
+                    message
+                );
+                
+                log.debug("Message sent successfully to user {} for chat {}", userId, chatId);
+            } catch (Exception e) {
+                log.error("Error sending message to user {}: {}", userId, e.getMessage());
+            }
+        }
+        
+        log.info("Message sent to {} users in chat {}", chatUsers.size() - 1, chatId);
+    }
+    
+    /**
+     * Broadcast a message update (edit or delete) to all users in a chat except the sender
+     */
+    public void broadcastMessageUpdate(WebSocketMessage message) {
+        Long chatId = message.getChatId();
+        Long senderId = message.getUserId();
+        
+        if (chatId == null) {
+            log.error("Cannot broadcast message update: No chat ID provided");
+            return;
+        }
+        
+        // Send the updated message to all users in the chat except the sender
+        sendMessageToOtherUsers(chatId, senderId, message);
+        
+        log.info("Message update (ID: {}, Type: {}) broadcast to chat {}", 
+                message.getMessageId(), 
+                message.getIsDeleted() ? "DELETE" : "EDIT", 
+                chatId);
     }
 }

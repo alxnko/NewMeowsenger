@@ -1,12 +1,34 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { tv } from "tailwind-variants";
 import Message from "@/components/elements/message";
 import { Input } from "@/components/elements/input";
 import { Button } from "@/components/elements/button";
-import { ChatMessage } from "@/contexts/chat-context";
+import { ChatMessage, useChat } from "@/contexts/chat-context";
+import { useAuth } from "@/contexts/auth-context";
+import { Badge } from "@heroui/badge";
 
 const messageListStyles = tv({
   base: "flex flex-col max-h-[calc(100dvh-90px)]",
+});
+
+// Styles for the scroll button
+const scrollButtonStyles = tv({
+  base: "fixed bottom-24 right-[50%] left-[50%] rounded-full shadow-lg flex items-center justify-center p-2 transition-all",
+  variants: {
+    hasNewMessages: {
+      true: "bg-green-500 text-white hover:bg-green-600",
+      false:
+        "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600",
+    },
+  },
+  defaultVariants: {
+    hasNewMessages: false,
+  },
+});
+
+// New typing indicator styles
+const typingIndicatorStyles = tv({
+  base: "flex items-center px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 animate-pulse",
 });
 
 export interface MessageData {
@@ -19,6 +41,10 @@ export interface MessageData {
   };
   isPending?: boolean;
   isRead?: boolean;
+  isDeleted?: boolean;
+  isEdited?: boolean;
+  isSystem?: boolean;
+  replyTo?: number;
 }
 
 export interface MessageListProps {
@@ -39,22 +65,100 @@ export const MessageList = ({
   isConnected = true,
 }: MessageListProps) => {
   const [newMessage, setNewMessage] = React.useState("");
-  const [replyTo, setReplyTo] = React.useState<number | undefined>(undefined);
+  const [replyTo, setReplyTo] = React.useState<MessageData | undefined>(
+    undefined
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
-  const prevMessagesLength = useRef(messages.length);
+  const prevMessagesLength = useRef(0); // Has to be 0 to scroll to the bottom on first load
+  const { user } = useAuth();
+  const { currentChat, typingUsers, sendTypingIndicator } = useChat();
+  const typingTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // State for scroll button and unread count
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: behavior,
+        block: "end",
+      });
+    }
+    // Reset unread count when scrolling to bottom
+    setUnreadCount(0);
   };
 
-  // Scroll to bottom when new messages arrive
+  // Check if scrolled to bottom
+  const isAtBottom = () => {
+    const container = messageContainerRef.current;
+    if (!container) return true;
+
+    const threshold = 150; // pixels from bottom to be considered "at bottom"
+    return (
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      threshold
+    );
+  };
+
+  // Track new messages and update scroll/unread state
   useEffect(() => {
-    if (messages.length > prevMessagesLength.current) {
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    // Special case for first load - always scroll to bottom
+    if (prevMessagesLength.current === 0) {
       scrollToBottom();
+      prevMessagesLength.current = messages.length;
+      return;
     }
+
+    // No new messages
+    if (messages.length <= prevMessagesLength.current) {
+      prevMessagesLength.current = messages.length;
+      return;
+    }
+
+    // If already at bottom, scroll to bottom automatically
+    if (isAtBottom()) {
+      scrollToBottom();
+    } else {
+      // Otherwise, increment unread count
+      const newMessages = messages.length - prevMessagesLength.current;
+      setUnreadCount((prev) => prev + newMessages);
+    }
+
     prevMessagesLength.current = messages.length;
   }, [messages.length]);
+
+  // Monitor scroll position to show/hide scroll button
+  useEffect(() => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Only show the scroll button when we're not at the bottom
+      const scrollPosition =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const shouldShowButton = scrollPosition > 100; // Lower threshold to show button earlier when scrolling up
+      setShowScrollButton(shouldShowButton);
+    };
+
+    // Add the scroll event listener
+    container.addEventListener("scroll", handleScroll);
+
+    // Run once on mount to set initial state
+    handleScroll();
+
+    // Also update button visibility when messages change
+    const messageUpdateCheck = setInterval(handleScroll, 300);
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      clearInterval(messageUpdateCheck);
+    };
+  }, []);
 
   // Mark messages as read when they appear in the viewport
   useEffect(() => {
@@ -94,23 +198,62 @@ export const MessageList = ({
     });
 
     return () => observer.disconnect();
-  }, [messages, currentUserId, onMarkAsRead]);
+  }, [messages, currentUserId]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim()) {
-      onSendMessage(newMessage, replyTo);
+      // Save scroll position information before updating
+      const container = messageContainerRef.current;
+      const wasAtBottom = isAtBottom();
+
+      // Send the message
+      onSendMessage(newMessage, Number(replyTo?.id));
       setNewMessage("");
       setReplyTo(undefined);
+
+      // Manually scroll only if we were already at the bottom or close to it
+      if (wasAtBottom) {
+        // Use requestAnimationFrame to ensure DOM is updated first
+        requestAnimationFrame(() => {
+          // Use a second RAF to ensure the browser has had time to process the first one
+          requestAnimationFrame(() => {
+            if (container) {
+              container.scrollTop = container.scrollHeight;
+            }
+          });
+        });
+      }
     }
   };
 
-  const handleReply = (messageId: number) => {
-    setReplyTo(messageId);
+  const handleReply = (message: MessageData) => {
+    setReplyTo(message);
   };
 
   const cancelReply = () => {
     setReplyTo(undefined);
+  };
+
+  // Handle typing indicator
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    // Clear existing timeout
+    if (typingTimeout.current) {
+      clearTimeout(typingTimeout.current);
+    }
+
+    // Only send typing indicator if there's content and a chat is open
+    if (e.target.value.trim() && currentChat) {
+      // Send typing indicator
+      sendTypingIndicator(currentChat.id);
+
+      // Set a timeout to clear typing status
+      typingTimeout.current = setTimeout(() => {
+        // Typing stopped
+      }, 3000);
+    }
   };
 
   // Convert ChatMessage to MessageData format for rendering
@@ -124,37 +267,111 @@ export const MessageList = ({
     },
     isPending: msg.isPending,
     isRead: msg.isRead,
+    isDeleted: msg.isDeleted,
+    isEdited: msg.isEdited,
+    isSystem: msg.isSystem,
+    replyTo: msg.replyTo,
   }));
+
+  // Filter out typing users who are currently typing and not the current user
+  const currentlyTypingUsers = typingUsers.filter(
+    (user) => user.userId !== currentUserId
+  );
 
   return (
     <div className={messageListStyles({ className })}>
-      <div className="flex-1 overflow-y-auto p-4" ref={messageContainerRef}>
+      <div
+        className="flex-1 overflow-y-auto p-4 relative"
+        ref={messageContainerRef}
+      >
         {messageDataList.length > 0 ? (
-          messageDataList.map((message) => (
-            <div key={message.id} data-message-id={message.id}>
-              <Message
-                content={message.content}
-                timestamp={message.timestamp}
-                sender={message.sender.name}
-                isOwn={String(message.sender.id) === String(currentUserId)}
-                isPending={message.isPending}
-                isRead={message.isRead}
-                onReply={() => handleReply(Number(message.id))}
-              />
-            </div>
-          ))
+          messageDataList.map((message) => {
+            return (
+              <div key={message.id} data-message-id={message.id}>
+                <Message
+                  content={message.content}
+                  timestamp={message.timestamp}
+                  sender={message.sender.name}
+                  isOwn={message.sender.name === user?.username}
+                  isPending={message.isPending}
+                  isRead={message.isRead}
+                  isEdited={message.isEdited}
+                  isSystem={message.isSystem}
+                  replyTo={message.replyTo}
+                  onReply={() => handleReply(message)}
+                />
+              </div>
+            );
+          })
         ) : (
           <div className="h-full flex items-center justify-center text-neutral-500 dark:text-neutral-400 lowercase">
             no messages yet. start the conversation!
           </div>
         )}
         <div ref={messagesEndRef} />
+
+        {/* Typing indicator */}
+        {currentlyTypingUsers.length > 0 && (
+          <div className={typingIndicatorStyles()}>
+            {currentlyTypingUsers.length === 1 ? (
+              <>
+                <div className="flex space-x-1 mr-2">
+                  <span className="animate-bounce">•</span>
+                  <span className="animate-bounce delay-75">•</span>
+                  <span className="animate-bounce delay-150">•</span>
+                </div>
+                <span>{currentlyTypingUsers[0].username} is typing...</span>
+              </>
+            ) : (
+              <>
+                <div className="flex space-x-1 mr-2">
+                  <span className="animate-bounce">•</span>
+                  <span className="animate-bounce delay-75">•</span>
+                  <span className="animate-bounce delay-150">•</span>
+                </div>
+                <span>{currentlyTypingUsers.length} people are typing...</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Scroll-to-bottom button */}
+        {showScrollButton && (
+          <Button
+            className={scrollButtonStyles({ hasNewMessages: unreadCount > 0 })}
+            isIconOnly
+            aria-label="Scroll to bottom"
+            onClick={() => scrollToBottom()}
+            size="sm"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="currentColor"
+              viewBox="0 0 16 16"
+            >
+              <path d="M8 4a.5.5 0 0 1 .5.5v5.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 10.293V4.5A.5.5 0 0 1 8 4z" />
+            </svg>
+
+            {unreadCount > 0 && (
+              <Badge
+                color="danger"
+                placement="top-right"
+                size="sm"
+                className="text-[0.6rem] min-w-[1.2rem] h-[1.2rem]"
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </Badge>
+            )}
+          </Button>
+        )}
       </div>
 
       {replyTo && (
         <div className="px-3 pt-2 border-t dark:border-neutral-800 flex items-center justify-between bg-neutral-50 dark:bg-neutral-900">
           <div className="text-sm text-neutral-600 dark:text-neutral-400">
-            Replying to message #{replyTo}
+            Replying to {replyTo.sender.name}: "{replyTo.content}"
           </div>
           <Button variant="ghost" size="sm" onClick={cancelReply}>
             ✕
@@ -166,7 +383,7 @@ export const MessageList = ({
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Input
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={handleInputChange}
             placeholder={isConnected ? "type a message..." : "reconnecting..."}
             className="flex-1"
             aria-label="Message input"

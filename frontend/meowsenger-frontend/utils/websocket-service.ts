@@ -2,12 +2,25 @@ import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 export interface WebSocketMessage {
-  type: "CHAT" | "JOIN" | "LEAVE" | "SUBSCRIBE" | "ERROR";
+  type: "CHAT" | "JOIN" | "LEAVE" | "SUBSCRIBE" | "ERROR" | "TYPING" | "READ";
   chatId: number;
   userId: number;
   content: string;
   timestamp: string;
   messageId?: number;
+
+  // Enhanced message data fields
+  username?: string; // Name of the message sender
+  isEdited?: boolean; // Whether the message has been edited
+  isDeleted?: boolean; // Whether the message has been deleted
+  isSystem?: boolean; // Whether it's a system message
+  replyTo?: number; // ID of message being replied to
+  isForwarded?: boolean; // Whether message is forwarded from another chat
+  isRead?: boolean; // Whether message has been read by recipient
+
+  // Group chat related fields
+  isGroup?: boolean; // Whether this is a group chat
+  chatName?: string; // Name of the chat (for group notifications)
 }
 
 export type MessageCallback = (message: WebSocketMessage) => void;
@@ -45,17 +58,25 @@ class WebSocketService {
           Authorization: `Bearer ${token}`,
         },
         debug: function (str: any) {
-          console.log("STOMP: " + str);
+          // Reducing debug noise
+          if (!str.includes("heart-beat") && !str.includes("Heartbeat")) {
+            console.log("STOMP: " + str);
+          }
         },
         reconnectDelay: 5000,
-        heartbeatIncoming: 4000,
-        heartbeatOutgoing: 4000,
+        heartbeatIncoming: 30000, // Increased from 4000
+        heartbeatOutgoing: 30000, // Increased from 4000
+        // Adding more stability with retry parameters
       });
+
+      // Add property to track last reconnect time to avoid rapid reconnection cycles
+      let lastReconnectTime = 0;
 
       this.client.onConnect = (frame: IFrame) => {
         console.log("WebSocket Connected: " + frame);
         this.connected = true;
         this.reconnectAttempts = 0;
+        lastReconnectTime = 0;
 
         // Store connection status in sessionStorage
         sessionStorage.setItem("ws_connected", "true");
@@ -188,7 +209,11 @@ class WebSocketService {
     chatId: number,
     callback: MessageCallback
   ): string {
-    const destination = `/topic/chat.${chatId}`;
+    if (!this.userId) {
+      console.error("User ID not set");
+      return "";
+    }
+
     const subscriptionKey = `chat_${chatId}`;
 
     if (this.subscriptions.has(subscriptionKey)) {
@@ -207,11 +232,17 @@ class WebSocketService {
       return subscriptionKey;
     }
 
-    // Subscribe to the chat room
-    const subscription = this.client.subscribe(
-      destination,
+    // Subscribe to the user-specific destination
+    const userDestination = `/user/${this.userId}/queue/chat.${chatId}`;
+    console.log(`Subscribing to user-specific destination: ${userDestination}`);
+
+    const userSubscription = this.client.subscribe(
+      userDestination,
       (message: IMessage) => {
         try {
+          console.log(
+            `Received message on user-specific channel for chat ${chatId}`
+          );
           const receivedMessage: WebSocketMessage = JSON.parse(message.body);
           callback(receivedMessage);
         } catch (error) {
@@ -220,13 +251,37 @@ class WebSocketService {
       }
     );
 
-    // Store the subscription for later use or unsubscribing
-    this.subscriptions.set(subscriptionKey, { id: subscription.id, callback });
+    // Also subscribe to the broadcast topic as a fallback
+    const broadcastDestination = `/topic/user.${this.userId}.chat.${chatId}`;
+    console.log(
+      `Subscribing to broadcast destination: ${broadcastDestination}`
+    );
+
+    const broadcastSubscription = this.client.subscribe(
+      broadcastDestination,
+      (message: IMessage) => {
+        try {
+          console.log(
+            `Received message on broadcast channel for chat ${chatId}`
+          );
+          const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+          callback(receivedMessage);
+        } catch (error) {
+          console.error("Error parsing message:", error);
+        }
+      }
+    );
+
+    // Store the primary subscription for later use or unsubscribing
+    this.subscriptions.set(subscriptionKey, {
+      id: userSubscription.id,
+      callback,
+    });
 
     // Notify the server about subscription
     this.sendSubscribeMessage(chatId);
 
-    return subscription.id;
+    return userSubscription.id;
   }
 
   /**
@@ -377,6 +432,140 @@ class WebSocketService {
   }
 
   /**
+   * Send a typing indicator notification
+   */
+  public sendTypingIndicator(chatId: number): void {
+    if (!this.client || !this.connected || !this.userId) return;
+
+    const message: WebSocketMessage = {
+      type: "TYPING",
+      userId: this.userId,
+      chatId: chatId,
+      content: "User is typing",
+      timestamp: new Date().toISOString(),
+    };
+
+    this.client.publish({
+      destination: "/app/chat.typing",
+      body: JSON.stringify(message),
+    });
+  }
+
+  /**
+   * Subscribe to typing indicators for a chat
+   */
+  public subscribeToTypingIndicators(
+    chatId: number,
+    callback: MessageCallback
+  ): string {
+    if (!this.client || !this.connected) {
+      console.warn(
+        "WebSocket not connected. Cannot subscribe to typing indicators."
+      );
+      return "";
+    }
+
+    const destination = `/topic/chat.${chatId}/typing`;
+    const subscriptionKey = `typing_${chatId}`;
+
+    if (this.subscriptions.has(subscriptionKey)) {
+      return this.subscriptions.get(subscriptionKey)!.id;
+    }
+
+    const subscription = this.client.subscribe(
+      destination,
+      (message: IMessage) => {
+        try {
+          const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+          callback(receivedMessage);
+        } catch (error) {
+          console.error("Error parsing typing indicator:", error);
+        }
+      }
+    );
+
+    this.subscriptions.set(subscriptionKey, { id: subscription.id, callback });
+    return subscription.id;
+  }
+
+  /**
+   * Edit a message
+   */
+  public editMessage(messageId: number, chatId: number, content: string): void {
+    if (!this.client || !this.connected || !this.userId) return;
+
+    const message: WebSocketMessage = {
+      type: "CHAT",
+      userId: this.userId,
+      chatId: chatId,
+      messageId: messageId,
+      content: content,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.client.publish({
+      destination: "/app/chat.edit",
+      body: JSON.stringify(message),
+    });
+  }
+
+  /**
+   * Delete a message
+   */
+  public deleteMessage(messageId: number, chatId: number): void {
+    if (!this.client || !this.connected || !this.userId) return;
+
+    const message: WebSocketMessage = {
+      type: "CHAT",
+      userId: this.userId,
+      chatId: chatId,
+      messageId: messageId,
+      content: "",
+      timestamp: new Date().toISOString(),
+    };
+
+    this.client.publish({
+      destination: "/app/chat.delete",
+      body: JSON.stringify(message),
+    });
+  }
+
+  /**
+   * Send a message with a reply
+   */
+  public sendReplyMessage(
+    chatId: number,
+    content: string,
+    replyToId: number
+  ): void {
+    if (!this.userId) {
+      console.error("User ID not set");
+      return;
+    }
+
+    const message: WebSocketMessage = {
+      type: "CHAT",
+      userId: this.userId,
+      chatId: chatId,
+      content: content,
+      timestamp: new Date().toISOString(),
+      replyTo: replyToId,
+    };
+
+    if (!this.client || !this.connected) {
+      // Queue the message for sending when connected
+      this.messageQueue.push(message);
+      console.warn("WebSocket not connected. Reply message queued.");
+      return;
+    }
+
+    this.client.publish({
+      destination: "/app/chat.send",
+      body: JSON.stringify(message),
+    });
+  }
+
+  /**
    * Send any queued messages
    */
   private sendQueuedMessages(): void {
@@ -397,7 +586,7 @@ class WebSocketService {
    * Resubscribe to all previously subscribed topics
    */
   private resubscribe(): void {
-    if (!this.client || !this.connected) return;
+    if (!this.client || !this.connected || !this.userId) return;
 
     this.subscriptions.forEach((subscription, key) => {
       const { callback } = subscription;
@@ -406,11 +595,21 @@ class WebSocketService {
       if (key.startsWith("chat_")) {
         const chatId = parseInt(key.replace("chat_", ""), 10);
         if (!isNaN(chatId)) {
-          // Subscribe to chat room
-          const newSubscription = this.client!.subscribe(
-            `/topic/chat.${chatId}`,
+          console.log(`Resubscribing to chat ${chatId}`);
+
+          // Subscribe to chat room using user-specific destination
+          const userDestination = `/user/${this.userId}/queue/chat.${chatId}`;
+          console.log(
+            `Resubscribing to user-specific destination: ${userDestination}`
+          );
+
+          const userSubscription = this.client!.subscribe(
+            userDestination,
             (message: IMessage) => {
               try {
+                console.log(
+                  `Received message on user-specific channel for chat ${chatId}`
+                );
                 const receivedMessage: WebSocketMessage = JSON.parse(
                   message.body
                 );
@@ -421,14 +620,34 @@ class WebSocketService {
             }
           );
 
+          // Also subscribe to the broadcast topic as a fallback
+          const broadcastDestination = `/topic/user.${this.userId}.chat.${chatId}`;
+          console.log(
+            `Resubscribing to broadcast destination: ${broadcastDestination}`
+          );
+
+          this.client!.subscribe(broadcastDestination, (message: IMessage) => {
+            try {
+              console.log(
+                `Received message on broadcast channel for chat ${chatId}`
+              );
+              const receivedMessage: WebSocketMessage = JSON.parse(
+                message.body
+              );
+              callback(receivedMessage);
+            } catch (error) {
+              console.error("Error parsing message:", error);
+            }
+          });
+
           // Update subscription ID
-          this.subscriptions.set(key, { id: newSubscription.id, callback });
+          this.subscriptions.set(key, { id: userSubscription.id, callback });
 
           // Send subscription message to server
           this.sendSubscribeMessage(chatId);
         }
       } else if (key.startsWith("read_receipts_")) {
-        // Handle other subscription types if needed
+        // Handle read receipts subscription
         const userId = parseInt(key.replace("read_receipts_", ""), 10);
         if (!isNaN(userId)) {
           const newSubscription = this.client!.subscribe(
@@ -448,8 +667,88 @@ class WebSocketService {
           // Update subscription ID
           this.subscriptions.set(key, { id: newSubscription.id, callback });
         }
+      } else if (key.startsWith("typing_")) {
+        // Handle typing indicators which still use broadcast topic pattern
+        const chatId = parseInt(key.replace("typing_", ""), 10);
+        if (!isNaN(chatId)) {
+          const newSubscription = this.client!.subscribe(
+            `/topic/chat.${chatId}/typing`,
+            (message: IMessage) => {
+              try {
+                const receivedMessage: WebSocketMessage = JSON.parse(
+                  message.body
+                );
+                callback(receivedMessage);
+              } catch (error) {
+                console.error("Error parsing typing indicator:", error);
+              }
+            }
+          );
+
+          // Update subscription ID
+          this.subscriptions.set(key, { id: newSubscription.id, callback });
+        }
       }
     });
+  }
+
+  /**
+   * Get current connection status and user ID
+   */
+  public getConnectionStatus(): { connected: boolean; userId: number | null } {
+    return { connected: this.connected, userId: this.userId };
+  }
+
+  /**
+   * Ensure a connection is established with the user ID
+   * This is a helper method to make sure the userId is set before sending messages
+   */
+  public async ensureConnected(
+    userId?: number,
+    token?: string
+  ): Promise<boolean> {
+    // If we already have a connection with the correct userId, we're good
+    if (
+      this.connected &&
+      this.userId &&
+      (userId === undefined || this.userId === userId)
+    ) {
+      console.log("WebSocket already connected with correct user ID");
+      return true;
+    }
+
+    // If userId and token are provided, try to connect
+    if (userId !== undefined && token) {
+      console.log("Reconnecting WebSocket with user ID:", userId);
+      try {
+        return await this.connect(userId, token);
+      } catch (error) {
+        console.error("Failed to connect WebSocket:", error);
+        return false;
+      }
+    }
+
+    // Try to recover userId from session storage if it wasn't provided
+    if (!this.userId && userId === undefined) {
+      const storedUserId = sessionStorage.getItem("userId");
+      const storedToken = sessionStorage.getItem("token");
+
+      if (storedUserId && storedToken) {
+        const parsedUserId = parseInt(storedUserId, 10);
+        if (!isNaN(parsedUserId)) {
+          console.log("Reconnecting with stored user ID:", parsedUserId);
+          try {
+            return await this.connect(parsedUserId, storedToken);
+          } catch (error) {
+            console.error("Failed to connect with stored credentials:", error);
+            return false;
+          }
+        }
+      }
+    }
+
+    console.error("WebSocket not connected and no credentials available");
+    return false;
   }
 }
 

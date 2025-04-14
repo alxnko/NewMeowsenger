@@ -34,10 +34,10 @@ public class MessageService {
     private EntityManager entityManager;
 
     /**
-     * Save a new message to the database
+     * Save a new message to the database with optional reply-to reference
      */
     @Transactional
-    public Message saveMessage(String content, Long senderId, Long chatId) {
+    public Message saveMessage(String content, Long senderId, Long chatId, Long replyToId) {
         // Get the user
         User user = userRepository.findById(senderId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -56,6 +56,7 @@ public class MessageService {
                 .isEdited(false)
                 .isSystem(false)
                 .isForwarded(false)
+                .replyTo(replyToId) // Add reply-to reference if provided
                 .build();
         
         // Save the message first to get its ID
@@ -82,6 +83,14 @@ public class MessageService {
     }
     
     /**
+     * Overloaded method for backward compatibility
+     */
+    @Transactional
+    public Message saveMessage(String content, Long senderId, Long chatId) {
+        return saveMessage(content, senderId, chatId, null);
+    }
+    
+    /**
      * Get messages for a specific chat
      */
     public List<Message> getMessagesForChat(Long chatId) {
@@ -89,15 +98,81 @@ public class MessageService {
     }
     
     /**
-     * Mark a message as read for a user
+     * Mark a message as read for a user and return the message
      */
     @Transactional
-    public void markMessageAsRead(Long messageId, Long userId) {
+    public Message markMessageAsRead(Long messageId, Long userId) {
+        // First find the message to return it
+        Message message = messageRepository.findById(messageId).orElse(null);
+        if (message == null) {
+            return null;
+        }
+        
         // Use native SQL to delete from the usermessage junction table
         Query query = entityManager.createNativeQuery(
             "DELETE FROM user_message WHERE user_id = ? AND msg_id = ?");
         query.setParameter(1, userId);
         query.setParameter(2, messageId);
         query.executeUpdate();
+        
+        return message;
+    }
+    
+    /**
+     * Edit an existing message
+     */
+    @Transactional
+    public Message editMessage(Long messageId, String newContent, Long userId) {
+        Message message = messageRepository.findById(messageId).orElse(null);
+        if (message == null) {
+            return null;
+        }
+        
+        // Verify the user is the message author
+        if (!message.getUser().getId().equals(userId)) {
+            throw new RuntimeException("Only the message author can edit a message");
+        }
+        
+        message.setText(newContent);
+        message.setEdited(true);  // Changed from setIsEdited to setEdited
+        return messageRepository.save(message);
+    }
+    
+    /**
+     * Delete a message (soft delete)
+     */
+    @Transactional
+    public Message deleteMessage(Long messageId, Long userId) {
+        Message message = messageRepository.findById(messageId).orElse(null);
+        if (message == null) {
+            return null;
+        }
+        
+        // Verify the user is the message author or a chat admin
+        User user = userRepository.findById(userId).orElse(null);
+        Chat chat = message.getChat();
+        boolean isAdmin = chat.getAdmins().contains(user);
+        boolean isAuthor = message.getUser().getId().equals(userId);
+        
+        if (!isAuthor && !isAdmin) {
+            throw new RuntimeException("Only the message author or chat admins can delete a message");
+        }
+        
+        message.setDeleted(true);  // Changed from setIsDeleted to setDeleted
+        message.setText("[This message was deleted]");
+        return messageRepository.save(message);
+    }
+    
+    /**
+     * Check if a message is read by a specific user
+     */
+    public boolean isMessageReadByUser(Long messageId, Long userId) {
+        Query query = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM user_message WHERE user_id = ? AND msg_id = ?");
+        query.setParameter(1, userId);
+        query.setParameter(2, messageId);
+        
+        Number count = (Number) query.getSingleResult();
+        return count.intValue() == 0; // If no record exists, the message is read
     }
 }

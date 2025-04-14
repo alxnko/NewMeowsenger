@@ -9,6 +9,7 @@ import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ChatProvider } from "@/contexts/chat-context";
 import { LanguageProvider } from "@/contexts/language-context";
+import { ToastProvider } from "@/contexts/toast-context";
 
 export interface ProvidersProps {
   children: React.ReactNode;
@@ -30,9 +31,11 @@ export function Providers({ children, themeProps }: ProvidersProps) {
     <HeroUIProvider navigate={router.push}>
       <NextThemesProvider {...themeProps}>
         <LanguageProvider>
-          <AuthProvider>
-            <ChatProvider>{children}</ChatProvider>
-          </AuthProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <ChatProvider>{children}</ChatProvider>
+            </AuthProvider>
+          </ToastProvider>
         </LanguageProvider>
       </NextThemesProvider>
     </HeroUIProvider>
