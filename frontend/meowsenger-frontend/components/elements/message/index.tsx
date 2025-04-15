@@ -75,7 +75,6 @@ export const Message = ({
   sender,
   isOwn = false,
   isPending = false,
-  isRead = false,
   isDeleted = false,
   isEdited = false,
   isSystem = false,
@@ -115,7 +114,7 @@ export const Message = ({
         onClick={!isSystem && !isDeleted ? onReply : undefined}
       >
         {/* Reply reference display */}
-        {replyTo && replyMessage && !isSystem && (
+        {!!replyTo && replyMessage && !isSystem && (
           <div className={replyStyles({ isOwn })}>
             <span className="font-medium text-xs">
               {replyAuthor === sender

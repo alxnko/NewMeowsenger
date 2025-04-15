@@ -309,18 +309,25 @@ class WebSocketService {
    * Unsubscribe from a chat room
    */
   public unsubscribeFromChatRoom(chatId: number): void {
-    const subscriptionKey = `chat_${chatId}`;
-
-    if (!this.subscriptions.has(subscriptionKey)) {
-      return;
+    // Unsubscribe from main chat messages
+    const chatSubscriptionKey = `chat_${chatId}`;
+    if (this.subscriptions.has(chatSubscriptionKey)) {
+      if (this.client && this.connected) {
+        const { id } = this.subscriptions.get(chatSubscriptionKey)!;
+        this.client.unsubscribe(id);
+      }
+      this.subscriptions.delete(chatSubscriptionKey);
     }
 
-    if (this.client && this.connected) {
-      const { id } = this.subscriptions.get(subscriptionKey)!;
-      this.client.unsubscribe(id);
+    // Unsubscribe from typing indicators
+    const typingSubscriptionKey = `typing_${chatId}`;
+    if (this.subscriptions.has(typingSubscriptionKey)) {
+      if (this.client && this.connected) {
+        const { id } = this.subscriptions.get(typingSubscriptionKey)!;
+        this.client.unsubscribe(id);
+      }
+      this.subscriptions.delete(typingSubscriptionKey);
     }
-
-    this.subscriptions.delete(subscriptionKey);
   }
 
   /**

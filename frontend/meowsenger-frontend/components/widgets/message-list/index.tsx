@@ -5,7 +5,6 @@ import { Input } from "@/components/elements/input";
 import { Button } from "@/components/elements/button";
 import { ChatMessage, useChat } from "@/contexts/chat-context";
 import { useAuth } from "@/contexts/auth-context";
-import { Badge } from "@heroui/badge";
 
 const messageListStyles = tv({
   base: "flex flex-col max-h-[calc(100dvh-90px)]",
@@ -28,7 +27,7 @@ const scrollButtonStyles = tv({
 
 // New typing indicator styles
 const typingIndicatorStyles = tv({
-  base: "flex items-center px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 animate-pulse",
+  base: "flex items-center px-3 py-2 text-xs text-neutral-600 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-100 dark:border-neutral-800 rounded-md my-1 shadow-sm",
 });
 
 export interface MessageData {
@@ -74,6 +73,9 @@ export const MessageList = ({
   const { user } = useAuth();
   const { currentChat, typingUsers, sendTypingIndicator } = useChat();
   const typingTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
+  const lastTypingTimestamp = useRef<number>(0);
+  const inputChangeDebounce = useRef<NodeJS.Timeout | undefined>(undefined);
+  const [prevMessageIds, setPrevMessageIds] = useState<Set<number>>(new Set());
 
   // State for scroll button and unread count
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -95,12 +97,44 @@ export const MessageList = ({
     const container = messageContainerRef.current;
     if (!container) return true;
 
-    const threshold = 150; // pixels from bottom to be considered "at bottom"
+    const threshold = 300; // pixels from bottom to be considered "at bottom"
     return (
       container.scrollHeight - container.scrollTop - container.clientHeight <
       threshold
     );
   };
+
+  // Track message IDs to detect new messages vs confirmed messages
+  useEffect(() => {
+    // Create a set of message IDs from the current messages
+    const currentMessageIds = new Set(messages.map((msg) => msg.id));
+
+    // Find any confirmed messages (non-pending) that have replaced pending ones
+    const confirmedMessageIds = new Set<number>();
+
+    messages.forEach((msg) => {
+      if (!msg.isPending && !prevMessageIds.has(msg.id)) {
+        // This is a new confirmed message from server
+        // Check if it replaces a pending message from current user
+        const pendingMessage = messages.find(
+          (m) =>
+            m.isPending && m.author === user?.username && m.text === msg.text
+        );
+
+        if (pendingMessage) {
+          confirmedMessageIds.add(pendingMessage.id as number);
+        }
+      }
+    });
+
+    setPrevMessageIds(currentMessageIds);
+
+    // If we detected any confirmed messages, adjust prevMessagesLength
+    // to avoid treating them as new messages for scrolling
+    if (confirmedMessageIds.size > 0) {
+      prevMessagesLength.current = messages.length - confirmedMessageIds.size;
+    }
+  }, [messages, user?.username]);
 
   // Track new messages and update scroll/unread state
   useEffect(() => {
@@ -131,6 +165,13 @@ export const MessageList = ({
 
     prevMessagesLength.current = messages.length;
   }, [messages.length]);
+
+  // Scroll to bottom when someone is typing if user is already at the bottom
+  useEffect(() => {
+    if (currentlyTypingUsers.length > 0 && isAtBottom()) {
+      scrollToBottom();
+    }
+  }, [typingUsers]); // React to changes in the typing users
 
   // Monitor scroll position to show/hide scroll button
   useEffect(() => {
@@ -235,24 +276,36 @@ export const MessageList = ({
     setReplyTo(undefined);
   };
 
-  // Handle typing indicator
+  // Handle typing indicator with debounce
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
+    const value = e.target.value;
+    setNewMessage(value);
 
-    // Clear existing timeout
-    if (typingTimeout.current) {
-      clearTimeout(typingTimeout.current);
+    // Clear existing debounce timeout
+    if (inputChangeDebounce.current) {
+      clearTimeout(inputChangeDebounce.current);
     }
 
-    // Only send typing indicator if there's content and a chat is open
-    if (e.target.value.trim() && currentChat) {
-      // Send typing indicator
-      sendTypingIndicator(currentChat.id);
+    // Only process typing indicators if there's content and a chat is open
+    if (value.trim() && currentChat) {
+      // Debounce the typing indicator logic
+      inputChangeDebounce.current = setTimeout(() => {
+        const now = Date.now();
+        // Only send typing indicator every 3 seconds to reduce traffic further
+        if (now - lastTypingTimestamp.current > 3000) {
+          sendTypingIndicator(currentChat.id);
+          lastTypingTimestamp.current = now;
+        }
+      }, 300); // Wait 300ms before processing to reduce frequent state updates
 
-      // Set a timeout to clear typing status
+      // Auto-clear typing status after inactivity
+      if (typingTimeout.current) {
+        clearTimeout(typingTimeout.current);
+      }
       typingTimeout.current = setTimeout(() => {
-        // Typing stopped
-      }, 3000);
+        // Typing stopped - no need to do anything as the backend
+        // will timeout typing status automatically
+      }, 5000);
     }
   };
 
@@ -308,7 +361,6 @@ export const MessageList = ({
             no messages yet. start the conversation!
           </div>
         )}
-        <div ref={messagesEndRef} />
 
         {/* Typing indicator */}
         {currentlyTypingUsers.length > 0 && (
@@ -316,24 +368,37 @@ export const MessageList = ({
             {currentlyTypingUsers.length === 1 ? (
               <>
                 <div className="flex space-x-1 mr-2">
-                  <span className="animate-bounce">•</span>
-                  <span className="animate-bounce delay-75">•</span>
-                  <span className="animate-bounce delay-150">•</span>
+                  <span className="animate-bounce text-green-500 dark:text-green-400">
+                    •
+                  </span>
+                  <span className="animate-bounce delay-75 text-green-500 dark:text-green-400">
+                    •
+                  </span>
+                  <span className="animate-bounce delay-150 text-green-500 dark:text-green-400">
+                    •
+                  </span>
                 </div>
                 <span>{currentlyTypingUsers[0].username} is typing...</span>
               </>
             ) : (
               <>
                 <div className="flex space-x-1 mr-2">
-                  <span className="animate-bounce">•</span>
-                  <span className="animate-bounce delay-75">•</span>
-                  <span className="animate-bounce delay-150">•</span>
+                  <span className="animate-bounce text-green-500 dark:text-green-400">
+                    •
+                  </span>
+                  <span className="animate-bounce delay-75 text-green-500 dark:text-green-400">
+                    •
+                  </span>
+                  <span className="animate-bounce delay-150 text-green-500 dark:text-green-400">
+                    •
+                  </span>
                 </div>
                 <span>{currentlyTypingUsers.length} people are typing...</span>
               </>
             )}
           </div>
         )}
+        <div ref={messagesEndRef} />
 
         {/* Scroll-to-bottom button */}
         {showScrollButton && (
@@ -354,16 +419,7 @@ export const MessageList = ({
               <path d="M8 4a.5.5 0 0 1 .5.5v5.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 10.293V4.5A.5.5 0 0 1 8 4z" />
             </svg>
 
-            {unreadCount > 0 && (
-              <Badge
-                color="danger"
-                placement="top-right"
-                size="sm"
-                className="text-[0.6rem] min-w-[1.2rem] h-[1.2rem]"
-              >
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </Badge>
-            )}
+            {unreadCount > 0 && unreadCount > 99 ? "99+" : unreadCount}
           </Button>
         )}
       </div>

@@ -184,6 +184,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Handle WebSocket messages for the current chat
   const handleWebSocketMessage = useCallback(
     (message: WebSocketMessage) => {
+      console.log("Received WebSocket message:", message);
+      
       if (message.type === "CHAT") {
         // Convert WebSocket message to UI message format with all the enhanced data
         const newMessage: ChatMessage = {
@@ -200,44 +202,76 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           isPending: false, // Messages from WebSocket are confirmed
         };
 
-        // Handle message updates (edits/deletes) by replacing the existing message
-        if (message.messageId) {
-          setCurrentMessages((prevMessages) => {
-            // Check if this is an existing message being updated (edit/delete)
-            const messageExists = prevMessages.some(
+        setCurrentMessages((prevMessages) => {
+          // Debug logging to diagnose the issue
+          console.log("Processing incoming message:", {
+            id: newMessage.id,
+            text: newMessage.text,
+            author: newMessage.author,
+          });
+          
+          // First, check if this message is from the current user
+          const isFromCurrentUser = message.userId === user?.id;
+          
+          if (isFromCurrentUser) {
+            console.log("Message is from current user, checking for pending messages...");
+            // Find all pending messages from the current user
+            const pendingMessages = prevMessages.filter(
+              (msg) => msg.isPending && msg.author === user.username
+            );
+            
+            console.log(`Found ${pendingMessages.length} pending messages`);
+            
+            if (pendingMessages.length > 0) {
+              // Try to find an exact content match first
+              const exactMatchIndex = prevMessages.findIndex(
+                (msg) => 
+                  msg.isPending && 
+                  msg.author === user.username &&
+                  msg.text === message.content
+              );
+              
+              if (exactMatchIndex !== -1) {
+                console.log("Found exact match for pending message, replacing");
+                const updatedMessages = [...prevMessages];
+                updatedMessages[exactMatchIndex] = newMessage;
+                return updatedMessages;
+              }
+              
+              // If no exact match, take the oldest pending message as a fallback
+              // This handles cases where the text might have been modified by the server
+              console.log("No exact match, replacing oldest pending message");
+              const oldestPendingIndex = prevMessages.findIndex(
+                (msg) => msg.isPending && msg.author === user.username
+              );
+              
+              if (oldestPendingIndex !== -1) {
+                const updatedMessages = [...prevMessages];
+                updatedMessages[oldestPendingIndex] = newMessage;
+                return updatedMessages;
+              }
+            }
+          }
+
+          // Check if this is an existing message being updated (edit/delete)
+          if (message.messageId) {
+            const existingMessageIndex = prevMessages.findIndex(
               (msg) => msg.id === message.messageId
             );
 
-            if (messageExists) {
+            if (existingMessageIndex !== -1) {
+              console.log("Found existing message, updating");
               // If the message exists, replace it with the updated version
-              return prevMessages.map((msg) =>
-                msg.id === message.messageId ? newMessage : msg
-              );
-            } else {
-              // Check if this is a confirmation of a pending message we sent
-              // Look for a pending message with matching content sent by the current user
-              const pendingMessageIndex = prevMessages.findIndex(
-                (msg) =>
-                  msg.isPending &&
-                  msg.text === message.content &&
-                  msg.author === user?.username
-              );
-
-              if (pendingMessageIndex !== -1) {
-                // Replace the pending message with the confirmed one from server
-                const updatedMessages = [...prevMessages];
-                updatedMessages[pendingMessageIndex] = newMessage;
-                return updatedMessages;
-              }
-
-              // If it's a completely new message, add it to the list
-              return [...prevMessages, newMessage];
+              const updatedMessages = [...prevMessages];
+              updatedMessages[existingMessageIndex] = newMessage;
+              return updatedMessages;
             }
-          });
-        } else {
-          // Handle new messages (without an ID yet)
-          setCurrentMessages((prevMessages) => [...prevMessages, newMessage]);
-        }
+          }
+
+          console.log("No matching message found, adding as new");
+          // If it's a completely new message (from another user or system), add it to the list
+          return [...prevMessages, newMessage];
+        });
       } else if (message.type === "TYPING") {
         // Handle typing indicator
         setTypingUsers((prev) => {
@@ -265,7 +299,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }, 3000); // Adjust the delay as needed
       }
     },
-    [user?.username]
+    [user?.username, user?.id]
   );
 
   // Subscribe to current chat WebSocket updates
@@ -278,13 +312,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       handleWebSocketMessage
     );
 
+    // Subscribe to typing indicators for the current chat
+    websocketService.subscribeToTypingIndicators(
+      currentChat.id,
+      handleWebSocketMessage
+    );
+
     // Cleanup when changing chats or unmounting
     return () => {
       if (currentChat) {
         websocketService.unsubscribeFromChatRoom(currentChat.id);
       }
     };
-  }, [currentChat, wsConnected, user]);
+  }, [currentChat, wsConnected, user, handleWebSocketMessage]);
 
   // Subscribe to all chats for notifications
   useEffect(() => {
@@ -553,6 +593,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         isPending: true, // Flag to indicate the message is being sent
       };
 
+      // Log the optimistic message for debugging
+      console.log("Creating optimistic message:", {
+        id: optimisticId,
+        text,
+        author: user.username,
+        isPending: true
+      });
+
       setCurrentMessages((prev) => [...prev, optimisticMessage]);
 
       // Ensure WebSocket connection is established with the correct user ID
@@ -563,7 +611,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Send via WebSocket if connected
       if (isConnected) {
-        console.log(`Sending message via WebSocket to chat ${currentChat.id}`);
+        console.log(`Sending message via WebSocket to chat ${currentChat.id}: "${text}"`);
         if (replyTo) {
           // Use the reply-specific method if replying to a message
           websocketService.sendReplyMessage(currentChat.id, text, replyTo);
@@ -578,12 +626,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         await chatApi.sendMessage(token, to, text, replyTo);
       }
 
-      // Update the optimistic message to no longer be pending
-      setCurrentMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === optimisticId ? { ...msg, isPending: false } : msg
-        )
-      );
+      // We no longer need to update the optimistic message to non-pending here
+      // Because the WebSocket callback will handle this when the message is confirmed
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
 

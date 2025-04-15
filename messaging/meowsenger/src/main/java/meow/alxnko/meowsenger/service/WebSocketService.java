@@ -134,7 +134,7 @@ public class WebSocketService {
     
     /**
      * Process and save a new chat message, then broadcast it to all users in the chat
-     * except the sender
+     * including the sender
      */
     @Transactional
     public WebSocketMessage processAndSendMessage(WebSocketMessage inputMessage) {
@@ -184,8 +184,8 @@ public class WebSocketService {
                 .chatName(chat.getName())
                 .build();
         
-        // Get all users in this chat except the sender
-        sendMessageToOtherUsers(chatId, userId, responseMessage);
+        // Send to all users in the chat including the sender
+        sendMessageToAllUsers(chatId, userId, responseMessage);
         
         // Clear typing status for this user
         clearTypingStatus(chatId, userId);
@@ -231,18 +231,33 @@ public class WebSocketService {
      * Notify chat members that a user is typing
      */
     public void notifyTyping(Long chatId, Long userId) {
+        // Skip processing if we've received a typing notification from this user recently
+        Map<Long, LocalDateTime> chatTypingStatus = userTypingStatus.get(chatId);
+        if (chatTypingStatus != null) {
+            LocalDateTime lastTyping = chatTypingStatus.get(userId);
+            if (lastTyping != null) {
+                // If user sent typing notification in the last second, ignore this one
+                if (lastTyping.plusSeconds(1).isAfter(LocalDateTime.now())) {
+                    return;
+                }
+            }
+        }
+        
         // Update typing status
         userTypingStatus.computeIfAbsent(chatId, k -> new HashMap<>())
                 .put(userId, LocalDateTime.now());
         
+        // Get user details from cache if possible, or from database as fallback
+        String username;
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return;
+        username = user.getUsername();
         
         WebSocketMessage typingMessage = WebSocketMessage.builder()
                 .type(WebSocketMessage.MessageType.TYPING)
                 .chatId(chatId)
                 .userId(userId)
-                .username(user.getUsername())
+                .username(username)
                 .timestamp(LocalDateTime.now())
                 .build();
         
@@ -272,9 +287,9 @@ public class WebSocketService {
     }
     
     /**
-     * Send a message to all users in a chat except the sender
+     * Send a message to all users in a chat including the sender
      */
-    private void sendMessageToOtherUsers(Long chatId, Long senderId, WebSocketMessage message) {
+    private void sendMessageToAllUsers(Long chatId, Long senderId, WebSocketMessage message) {
         Map<Long, String> chatUsers = userChatSessions.get(chatId);
         if (chatUsers == null || chatUsers.isEmpty()) {
             log.warn("No users found in chat {} to send message", chatId);
@@ -283,14 +298,8 @@ public class WebSocketService {
         
         log.debug("Chat {} has {} users", chatId, chatUsers.size());
         
-        // Send the message to each user in the chat except the sender
+        // Send the message to each user in the chat INCLUDING the sender
         for (Long userId : chatUsers.keySet()) {
-            // Skip the sender
-            if (userId.equals(senderId)) {
-                log.debug("Skipping sender: {}", userId);
-                continue;
-            }
-            
             log.debug("Sending message to user {} for chat {}", userId, chatId);
             
             try {
@@ -314,11 +323,11 @@ public class WebSocketService {
             }
         }
         
-        log.info("Message sent to {} users in chat {}", chatUsers.size() - 1, chatId);
+        log.info("Message sent to {} users in chat {}", chatUsers.size(), chatId);
     }
     
     /**
-     * Broadcast a message update (edit or delete) to all users in a chat except the sender
+     * Broadcast a message update (edit or delete) to all users in a chat including the sender
      */
     public void broadcastMessageUpdate(WebSocketMessage message) {
         Long chatId = message.getChatId();
@@ -329,8 +338,8 @@ public class WebSocketService {
             return;
         }
         
-        // Send the updated message to all users in the chat except the sender
-        sendMessageToOtherUsers(chatId, senderId, message);
+        // Send the updated message to all users in the chat including the sender
+        sendMessageToAllUsers(chatId, senderId, message);
         
         log.info("Message update (ID: {}, Type: {}) broadcast to chat {}", 
                 message.getMessageId(), 
