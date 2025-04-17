@@ -36,13 +36,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Register the "/ws" endpoint for WebSocket connections
         registry.addEndpoint("/ws")
-                // Enable CORS for specific origins instead of wildcard
-                .setAllowedOrigins(
-                    "http://localhost:3000",
-                    "http://127.0.0.1:3000", 
-                    "http://localhost:80",
-                    "http://127.0.0.1:80"
-                )
+                // Use allowedOriginPatterns instead of setAllowedOrigins("*")
+                // This allows all origins but works with allowCredentials=true
+                .setAllowedOriginPatterns("*")
                 // Fallback to SockJS if WebSocket is not available
                 .withSockJS();
     }

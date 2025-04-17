@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { tv } from "tailwind-variants";
 import { formatDistance } from "date-fns";
 import { useChat } from "@/contexts/chat-context";
@@ -69,111 +69,115 @@ export interface MessageProps {
   className?: string;
 }
 
-export const Message = ({
-  content,
-  timestamp,
-  sender,
-  isOwn = false,
-  isPending = false,
-  isDeleted = false,
-  isEdited = false,
-  isSystem = false,
-  replyTo,
-  onReply,
-  className,
-}: MessageProps) => {
-  const { currentMessages } = useChat();
-  const [replyMessage, setReplyMessage] = useState<string | null>(null);
-  const [replyAuthor, setReplyAuthor] = useState<string | null>(null);
+export const Message = memo(
+  ({
+    content,
+    timestamp,
+    sender,
+    isOwn = false,
+    isPending = false,
+    isDeleted = false,
+    isEdited = false,
+    isSystem = false,
+    replyTo,
+    onReply,
+    className,
+  }: MessageProps) => {
+    const { currentMessages } = useChat();
+    const [replyMessage, setReplyMessage] = useState<string | null>(null);
+    const [replyAuthor, setReplyAuthor] = useState<string | null>(null);
 
-  // Find the message this is replying to (if any)
-  useEffect(() => {
-    if (replyTo && currentMessages) {
-      const foundMessage = currentMessages.find((msg) => msg.id === replyTo);
-      if (foundMessage) {
-        setReplyMessage(foundMessage.text);
-        setReplyAuthor(foundMessage.author);
+    // Find the message this is replying to (if any)
+    useEffect(() => {
+      if (replyTo && currentMessages) {
+        const foundMessage = currentMessages.find((msg) => msg.id === replyTo);
+        if (foundMessage) {
+          setReplyMessage(foundMessage.text);
+          setReplyAuthor(foundMessage.author);
+        }
       }
-    }
-  }, [replyTo, currentMessages]);
+    }, [replyTo, currentMessages]);
 
-  const formattedTime = timestamp
-    ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
-    : "";
+    const formattedTime = timestamp
+      ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
+      : "";
 
-  return (
-    <div className="flex flex-col mb-4">
-      <div
-        className={messageStyles({
-          isOwn,
-          isPending,
-          isSystem,
-          isDeleted,
-          className,
-        })}
-        onClick={!isSystem && !isDeleted ? onReply : undefined}
-      >
-        {/* Reply reference display */}
-        {!!replyTo && replyMessage && !isSystem && (
-          <div className={replyStyles({ isOwn })}>
-            <span className="font-medium text-xs">
-              {replyAuthor === sender
-                ? "Replying to self"
-                : `Reply to ${replyAuthor}`}
-              :
-            </span>
-            <div className="text-xs opacity-75 truncate">{replyMessage}</div>
-          </div>
-        )}
-
-        {/* Show the sender name only for messages from others, not your own */}
-        {!isOwn && !isSystem && (
-          <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
-            {sender}
-          </div>
-        )}
-
-        <p className="text-sm text-neutral-900 dark:text-neutral-100">
-          {content}
-          {isEdited && !isDeleted && (
-            <span
-              className="text-xs text-neutral-500 dark:text-neutral-400 ml-1"
-              title="Edited"
-            >
-              (edited)
-            </span>
+    return (
+      <div className={clsx("flex flex-col mb-4", isOwn ? "mr-4" : "ml-4")}>
+        <div
+          className={messageStyles({
+            isOwn,
+            isPending,
+            isSystem,
+            isDeleted,
+            className,
+          })}
+          onClick={!isSystem && !isDeleted ? onReply : undefined}
+        >
+          {/* Reply reference display */}
+          {!!replyTo && replyMessage && !isSystem && (
+            <div className={replyStyles({ isOwn })}>
+              <span className="font-medium text-xs">
+                {replyAuthor === sender
+                  ? "Replying to self"
+                  : `Reply to ${replyAuthor}`}
+                :
+              </span>
+              <div className="text-xs opacity-75 truncate">{replyMessage}</div>
+            </div>
           )}
-        </p>
 
-        {!isSystem && (
-          <div
-            className={clsx(
-              "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1",
-              isOwn && "justify-end"
+          {/* Show the sender name only for messages from others, not your own */}
+          {!isOwn && !isSystem && (
+            <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
+              {sender}
+            </div>
+          )}
+
+          <p className="text-sm text-neutral-900 dark:text-neutral-100">
+            {content}
+            {isEdited && !isDeleted && (
+              <span
+                className="text-xs text-neutral-500 dark:text-neutral-400 ml-1"
+                title="Edited"
+              >
+                (edited)
+              </span>
             )}
-          >
-            <span className="text-[10px]">{formattedTime}</span>
-          </div>
-        )}
+          </p>
 
-        {/* Message actions - only show on hover for non-system messages */}
-        {!isSystem && !isDeleted && !isPending && (
-          <div className="absolute top-0 right-0 -mt-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-800 rounded-full shadow-sm">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onReply?.();
-              }}
-              className="p-1 text-xs text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              title="Reply"
+          {!isSystem && (
+            <div
+              className={clsx(
+                "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1",
+                isOwn && "justify-end"
+              )}
             >
-              ↩️
-            </button>
-          </div>
-        )}
+              <span className="text-[10px]">{formattedTime}</span>
+            </div>
+          )}
+
+          {/* Message actions - only show on hover for non-system messages */}
+          {!isSystem && !isDeleted && !isPending && (
+            <div className="absolute top-0 right-0 -mt-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-800 rounded-full shadow-sm">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReply?.();
+                }}
+                className="p-1 text-xs text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                title="Reply"
+              >
+                ↩️
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  }
+);
+
+Message.displayName = "Message";
 
 export default Message;

@@ -37,7 +37,16 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Allow access from any host for development
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "*"]
+
+# Try to load additional hosts from local_hosts.py (created by setupNetwork.bat)
+try:
+    from .local_hosts import ALLOWED_HOSTS as LOCAL_ALLOWED_HOSTS
+
+    ALLOWED_HOSTS = LOCAL_ALLOWED_HOSTS
+except ImportError:
+    pass
 
 
 # Application definition

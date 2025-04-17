@@ -1,7 +1,5 @@
 @echo off
-REM Script to run both frontend and backend with automatic network setup
-
-echo Running network setup to detect local IP address...
+echo Setting up network for cross-device development...
 
 REM Get the local IP address - improved to get the actual network adapter IP
 SET LOCAL_IP=127.0.0.1
@@ -14,10 +12,7 @@ FOR /F "tokens=4 delims= " %%i IN ('route print ^| find "0.0.0.0" ^| find "0.0.0
 )
 
 :IP_FOUND
-echo.
-echo =======================================
 echo Your local network IP is: %LOCAL_IP%
-echo =======================================
 echo.
 
 REM Create .env.local file for frontend with proper URLs
@@ -28,6 +23,9 @@ echo NEXT_PUBLIC_API_URL=http://%LOCAL_IP%:8000
 echo NEXT_PUBLIC_WS_URL=http://%LOCAL_IP%:8081/ws
 ) > frontend\meowsenger-frontend\.env.local
 
+echo Frontend configuration updated successfully.
+echo.
+
 REM Update Django settings to include all needed hosts
 echo Updating Django settings...
 (
@@ -36,6 +34,9 @@ echo # This is appended by the network setup script
 echo.
 echo ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '%LOCAL_IP%', '*']
 ) > backend\meowsenger_backend\local_hosts.py
+
+echo Django settings updated successfully.
+echo.
 
 REM Update Spring Boot application properties
 echo Updating messaging service configuration...
@@ -80,25 +81,46 @@ echo logging.level.org.hibernate.SQL=DEBUG
 echo logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 ) > messaging\meowsenger\src\main\resources\application.properties
 
-echo All configurations updated! Starting services...
-
-REM Run Django migrations and start the backend server in the same terminal
-start cmd /k "cd backend && python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
-
-REM Add delay to ensure Django has time to initialize the database
-echo Waiting for Django to initialize the database...
-timeout /t 10 /nobreak
-
-REM Start the messaging service after Django has initialized
-start cmd /k "cd messaging/meowsenger && mvn spring-boot:run"
-
-REM Start the frontend server - removed --host flag since it doesn't work with turbopack
-start cmd /k "cd frontend/meowsenger-frontend && npm run dev"
-
+echo Messaging service configuration updated successfully.
 echo.
-echo =======================================
-echo All services started! Access your application from any device:
-echo    Frontend: http://%LOCAL_IP%:3000
-echo    Backend API: http://%LOCAL_IP%:8000
-echo    WebSocket: ws://%LOCAL_IP%:8081/ws
-echo =======================================
+
+echo Creating a network-ready development launcher...
+(
+echo @echo off
+echo REM Script to run both frontend and backend with network configuration
+echo.
+echo REM Display network information
+echo echo =======================================
+echo echo Your services will run on IP: %LOCAL_IP%
+echo echo =======================================
+echo echo.
+echo.
+echo REM Run Django migrations and start the backend server in the same terminal
+echo start cmd /k "cd backend && python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+echo.
+echo REM Add delay to ensure Django has time to initialize the database
+echo echo Waiting for Django to initialize the database...
+echo timeout /t 10 /nobreak
+echo.
+echo REM Start the messaging service after Django has initialized
+echo start cmd /k "cd messaging/meowsenger && mvn spring-boot:run"
+echo.
+echo REM Start the frontend server - without host parameter which doesn't work with turbopack
+echo start cmd /k "cd frontend/meowsenger-frontend && npm run dev"
+echo.
+echo echo.
+echo echo =======================================
+echo echo Access your application from other devices using:
+echo echo    Frontend: http://%LOCAL_IP%:3000
+echo echo    Backend API: http://%LOCAL_IP%:8000
+echo echo    WebSocket: ws://%LOCAL_IP%:8081/ws
+echo echo =======================================
+) > runDevNetwork.bat
+
+echo Network-ready development launcher created successfully.
+echo.
+echo =====================================================
+echo Setup complete! To run your application with network support:
+echo    1. Run the command: runDevNetwork.bat
+echo    2. Access from other devices using http://%LOCAL_IP%:3000
+echo =====================================================

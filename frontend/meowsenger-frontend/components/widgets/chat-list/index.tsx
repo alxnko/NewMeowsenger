@@ -34,15 +34,6 @@ export const ChatList = ({
   onSearch,
   className,
 }: ChatListProps) => {
-  const router = useRouter();
-
-  const handleChatClick = (chat: ChatBlock) => {
-    const chatPath = chat.isGroup
-      ? `/chats/group/${chat.id}`
-      : `/chats/user/${chat.url}`;
-    router.push(chatPath);
-  };
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (onSearch) {
       onSearch(e.target.value);

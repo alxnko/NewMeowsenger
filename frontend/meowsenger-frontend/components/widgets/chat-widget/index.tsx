@@ -1,11 +1,9 @@
-import { useState, ReactNode } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { ReactNode, memo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
 import { ChatDetails, ChatMessage } from "@/contexts/chat-context";
 import Button from "@/components/elements/button";
-import Input from "@/components/elements/input";
 import MessageList from "@/components/widgets/message-list";
 import WebSocketStatus from "@/components/elements/websocket-status";
 
@@ -22,7 +20,7 @@ export interface ChatWidgetProps {
   headerContent?: ReactNode;
 }
 
-export default function ChatWidget({
+const ChatWidget = ({
   chat,
   messages,
   loading,
@@ -33,7 +31,7 @@ export default function ChatWidget({
   isConnected = true,
   backUrl = "/chats",
   headerContent,
-}: ChatWidgetProps) {
+}: ChatWidgetProps) => {
   const { user } = useAuth();
   const { t } = useLanguage();
 
@@ -72,7 +70,7 @@ export default function ChatWidget({
   return (
     <div className="flex flex-col h-full">
       {/* Chat header */}
-      <div className="flex items-center justify-between pb-4 border-b dark:border-neutral-800">
+      <div className="fixed top-0 right-4 left-1 h-14 flex items-center justify-between border-b dark:border-neutral-800">
         <div className="flex items-center space-x-3">
           <Button
             as={Link}
@@ -117,9 +115,11 @@ export default function ChatWidget({
           onSendMessage={onSendMessage}
           onMarkAsRead={onMarkAsRead}
           isConnected={isConnected}
-          className="h-full"
+          className="h-full mt-10"
         />
       </div>
     </div>
   );
-}
+};
+
+export default memo(ChatWidget);
