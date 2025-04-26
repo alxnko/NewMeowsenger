@@ -5,6 +5,7 @@ import {
   ReactNode,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { useAuth } from "./auth-context";
 import { chatApi, GroupResponse } from "@/utils/api-client";
@@ -61,6 +62,9 @@ export interface ChatDetails extends ChatBlock {
   admins: string[];
 }
 
+// Constants for lazy loading
+const MESSAGES_BATCH_SIZE = 30; // Number of messages to load per batch
+
 interface ChatContextType {
   chats: ChatBlock[];
   currentChat: ChatDetails | null;
@@ -84,6 +88,9 @@ interface ChatContextType {
   deleteMessage: (messageId: number) => Promise<void>;
   markMessageAsRead: (messageId: number) => void;
   sendTypingIndicator: (chatId: number) => void;
+  loadOlderMessages: () => Promise<boolean>;
+  isLoadingOlderMessages: boolean;
+  hasMoreMessages: boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -104,6 +111,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
     new Map()
   );
+  // States for lazy loading
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  // Store oldest message ID for pagination
+  const oldestMessageIdRef = useRef<number | null>(null);
+
   const { showToast } = useToast();
 
   // Clean up old join events periodically (every 30 seconds)
@@ -185,7 +198,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const handleWebSocketMessage = useCallback(
     (message: WebSocketMessage) => {
       console.log("Received WebSocket message:", message);
-      
+
       if (message.type === "CHAT") {
         // Convert WebSocket message to UI message format with all the enhanced data
         const newMessage: ChatMessage = {
@@ -209,42 +222,44 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             text: newMessage.text,
             author: newMessage.author,
           });
-          
+
           // First, check if this message is from the current user
           const isFromCurrentUser = message.userId === user?.id;
-          
+
           if (isFromCurrentUser) {
-            console.log("Message is from current user, checking for pending messages...");
+            console.log(
+              "Message is from current user, checking for pending messages..."
+            );
             // Find all pending messages from the current user
             const pendingMessages = prevMessages.filter(
               (msg) => msg.isPending && msg.author === user.username
             );
-            
+
             console.log(`Found ${pendingMessages.length} pending messages`);
-            
+
             if (pendingMessages.length > 0) {
               // Try to find an exact content match first
               const exactMatchIndex = prevMessages.findIndex(
-                (msg) => 
-                  msg.isPending && 
+                (msg) =>
+                  msg.isPending &&
                   msg.author === user.username &&
                   msg.text === message.content
               );
-              
+
               if (exactMatchIndex !== -1) {
                 console.log("Found exact match for pending message, replacing");
                 const updatedMessages = [...prevMessages];
                 updatedMessages[exactMatchIndex] = newMessage;
                 return updatedMessages;
               }
-              
+
               // If no exact match, take the oldest pending message as a fallback
               // This handles cases where the text might have been modified by the server
               console.log("No exact match, replacing oldest pending message");
               const oldestPendingIndex = prevMessages.findIndex(
                 (msg) => msg.isPending && msg.author === user.username
               );
-              
+
               if (oldestPendingIndex !== -1) {
                 const updatedMessages = [...prevMessages];
                 updatedMessages[oldestPendingIndex] = newMessage;
@@ -369,9 +384,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
 
     fetchInitialChats();
-
-    const interval = setInterval(fetchChats, 10000);
-    return () => clearInterval(interval);
   }, [token]);
 
   const fetchChats = async () => {
@@ -398,20 +410,52 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
 
+    // Reset lazy loading state when opening a new chat
+    setHasMoreMessages(true);
+    setIsLoadingOlderMessages(false);
+    oldestMessageIdRef.current = null;
+
     try {
       let response;
 
       // If it's a number, it's a group chat ID
       if (typeof chatIdOrName === "number") {
-        response = await chatApi.getGroup(token, chatIdOrName);
+        // Use the updated API with limit parameter to get only the initial batch of messages
+        response = await chatApi.getGroup(
+          token,
+          chatIdOrName,
+          MESSAGES_BATCH_SIZE
+        );
       } else {
-        // Otherwise it's a username for a direct chat
-        response = await chatApi.getChat(token, chatIdOrName);
+        // Get only the initial batch of messages for direct chat
+        response = await chatApi.getChat(
+          token,
+          chatIdOrName,
+          MESSAGES_BATCH_SIZE
+        );
       }
 
       if (response.status) {
         setCurrentChat(response.chat);
-        setCurrentMessages(response.messages || []);
+
+        // Store the initial messages
+        const initialMessages = response.messages || [];
+        setCurrentMessages(initialMessages);
+
+        // Set the oldest message ID for pagination if we have messages
+        if (initialMessages.length > 0) {
+          // Find the oldest message by ID
+          const oldestMsg = initialMessages.reduce(
+            (oldest, current) => (oldest.id < current.id ? oldest : current),
+            initialMessages[0]
+          );
+          oldestMessageIdRef.current = oldestMsg.id;
+
+          // Use the has_more flag from the API response
+          setHasMoreMessages(response.has_more || false);
+        } else {
+          setHasMoreMessages(false);
+        }
 
         // Subscribe to WebSocket updates for this chat if WebSocket is connected
         if (wsConnected && user) {
@@ -427,6 +471,84 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setError(err instanceof Error ? err.message : "Failed to open chat");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load older messages function for lazy loading
+  const loadOlderMessages = async (): Promise<boolean> => {
+    if (
+      !token ||
+      !currentChat ||
+      isLoadingOlderMessages ||
+      !hasMoreMessages ||
+      oldestMessageIdRef.current === null
+    ) {
+      return false;
+    }
+
+    setIsLoadingOlderMessages(true);
+
+    try {
+      // Fetch older messages using the oldest message ID as reference
+      const chatId = currentChat.id; // Always use the chat ID, not the name
+      const response = await chatApi.getOlderMessages(
+        token,
+        chatId,
+        oldestMessageIdRef.current,
+        MESSAGES_BATCH_SIZE
+      );
+
+      if (response.status && response.messages) {
+        // If no messages returned, we've reached the end
+        if (response.messages.length === 0) {
+          setHasMoreMessages(false);
+          return false;
+        }
+
+        // Update the oldest message ID reference
+        if (response.messages.length > 0) {
+          const newOldestMsg = response.messages.reduce(
+            (oldest, current) => (oldest.id < current.id ? oldest : current),
+            response.messages[0]
+          );
+          oldestMessageIdRef.current = newOldestMsg.id;
+        }
+
+        // Prepend the older messages to the current messages
+        setCurrentMessages((prevMessages) => {
+          // Create a set of existing message IDs for faster lookup
+          const existingIds = new Set(prevMessages.map((msg) => msg.id));
+
+          // Filter out any duplicate messages
+          const newMessages = response.messages.filter(
+            (msg) => !existingIds.has(msg.id)
+          );
+
+          // Sort all messages by time to ensure correct order
+          return [...newMessages, ...prevMessages].sort(
+            (a, b) => a.time - b.time
+          );
+        });
+
+        // Use the has_more flag from the API response if available
+        setHasMoreMessages(
+          response.has_more !== undefined
+            ? response.has_more
+            : response.messages.length >= MESSAGES_BATCH_SIZE
+        );
+
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      console.error("Error loading older messages:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load older messages"
+      );
+      return false;
+    } finally {
+      setIsLoadingOlderMessages(false);
     }
   };
 
@@ -598,7 +720,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         id: optimisticId,
         text,
         author: user.username,
-        isPending: true
+        isPending: true,
       });
 
       setCurrentMessages((prev) => [...prev, optimisticMessage]);
@@ -611,7 +733,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Send via WebSocket if connected
       if (isConnected) {
-        console.log(`Sending message via WebSocket to chat ${currentChat.id}: "${text}"`);
+        console.log(
+          `Sending message via WebSocket to chat ${currentChat.id}: "${text}"`
+        );
         if (replyTo) {
           // Use the reply-specific method if replying to a message
           websocketService.sendReplyMessage(currentChat.id, text, replyTo);
@@ -762,6 +886,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         deleteMessage,
         markMessageAsRead,
         sendTypingIndicator,
+        loadOlderMessages,
+        isLoadingOlderMessages,
+        hasMoreMessages,
       }}
     >
       {children}

@@ -158,9 +158,26 @@ def chat_to_dict(chat, user):
     }
 
 
-def messages_to_arr_from(chat_id):
-    """Convert chat messages to an array."""
-    messages = Message.objects.filter(chat_id=chat_id).order_by("id")
+def messages_to_arr_from(chat_id, before_id=None, limit=30):
+    """
+    Convert chat messages to an array with pagination support.
+
+    Args:
+        chat_id: ID of the chat
+        before_id: If provided, return messages before this message ID
+        limit: Maximum number of messages to return
+    """
+    messages_query = Message.objects.filter(chat_id=chat_id)
+
+    # If before_id is provided, only get messages with ID less than before_id
+    if before_id:
+        messages_query = messages_query.filter(id__lt=before_id)
+
+    # Get messages in reverse order (newest first), then reverse back for presentation
+    messages = messages_query.order_by("-id")[:limit]
+
+    # Convert to list and reverse order for chronological display
+    messages = list(reversed(messages))
 
     return [
         {
@@ -229,6 +246,10 @@ def get_chat(request):
     data = request.data
     user = request.user
 
+    # Get pagination parameters if provided
+    limit = int(data.get("limit", 30))
+    before_id = data.get("before_id")
+
     # Find the target user
     target_username = data.get("from")
     target_user = User.objects.filter(username=target_username).first()
@@ -249,12 +270,18 @@ def get_chat(request):
         if chat:
             mark_as_read(chat, user)
             last = chat.last_time.timestamp()
+
+            # Get total messages count to help with pagination
+            total_messages = Message.objects.filter(chat_id=chat.id).count()
+
             return Response(
                 {
                     "status": True,
                     "chat": chat_to_dict(chat, user),
-                    "messages": messages_to_arr_from(chat.id),
+                    "messages": messages_to_arr_from(chat.id, before_id, limit),
                     "last": last,
+                    "has_more": before_id is not None or total_messages > limit,
+                    "total_messages": total_messages,
                 }
             )
 
@@ -270,6 +297,8 @@ def get_chat(request):
                 "chat": chat_to_dict(chat, user),
                 "messages": [],
                 "last": last,
+                "has_more": False,
+                "total_messages": 0,
             }
         )
 
@@ -283,12 +312,18 @@ def get_chat(request):
         chat = common_chats.first()
         mark_as_read(chat, user)
         last = chat.last_time.timestamp()
+
+        # Get total messages count
+        total_messages = Message.objects.filter(chat_id=chat.id).count()
+
         return Response(
             {
                 "status": True,
                 "chat": chat_to_dict(chat, user),
-                "messages": messages_to_arr_from(chat.id),
+                "messages": messages_to_arr_from(chat.id, before_id, limit),
                 "last": last,
+                "has_more": before_id is not None or total_messages > limit,
+                "total_messages": total_messages,
             }
         )
 
@@ -298,7 +333,14 @@ def get_chat(request):
     last = chat.last_time.timestamp()
 
     return Response(
-        {"status": True, "chat": chat_to_dict(chat, user), "messages": [], "last": last}
+        {
+            "status": True,
+            "chat": chat_to_dict(chat, user),
+            "messages": [],
+            "last": last,
+            "has_more": False,
+            "total_messages": 0,
+        }
     )
 
 
@@ -386,6 +428,10 @@ def get_group(request):
     data = request.data
     user = request.user
 
+    # Get pagination parameters if provided
+    limit = int(data.get("limit", 30))
+    before_id = data.get("before_id")
+
     # Get the chat
     try:
         chat = Chat.objects.get(pk=data.get("from"))
@@ -397,12 +443,17 @@ def get_group(request):
         mark_as_read(chat, user)
         last = chat.last_time.timestamp()
 
+        # Get total messages count for pagination info
+        total_messages = Message.objects.filter(chat_id=chat.id).count()
+
         return Response(
             {
                 "status": True,
                 "chat": chat_to_dict(chat, user),
-                "messages": messages_to_arr_from(chat.id),
+                "messages": messages_to_arr_from(chat.id, before_id, limit),
                 "last": last,
+                "has_more": before_id is not None or total_messages > limit,
+                "total_messages": total_messages,
             }
         )
 
@@ -605,3 +656,44 @@ def save_settings(request):
     chat.save()
 
     return Response({"status": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_older_messages(request):
+    """Get older messages for a chat with pagination."""
+    data = request.data
+    user = request.user
+
+    # Get pagination parameters
+    limit = int(data.get("limit", 30))
+    before_id = data.get("before_id")
+    chat_id = data.get("chat_id")
+
+    if not chat_id or not before_id:
+        return Response(
+            {"status": False, "message": "chat_id and before_id are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Get the chat
+    try:
+        chat = Chat.objects.get(pk=chat_id)
+    except Chat.DoesNotExist:
+        return Response({"status": False}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if user is a member of the chat
+    if user not in chat.users.all():
+        return Response({"status": False}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get messages with pagination
+    messages = messages_to_arr_from(chat.id, before_id, limit)
+
+    # Check if there are more messages to load
+    has_more = False
+    if messages:
+        # If we got messages, check if there are older ones
+        oldest_id = min(msg["id"] for msg in messages) if messages else 0
+        has_more = Message.objects.filter(chat_id=chat.id, id__lt=oldest_id).exists()
+
+    return Response({"status": True, "messages": messages, "has_more": has_more})

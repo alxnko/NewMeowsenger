@@ -166,19 +166,63 @@ export const chatApi = {
       token,
     }),
 
-  getChat: (token: string, from: string): Promise<ChatResponse> =>
-    apiFetch<ChatResponse>("/api/c/get_chat", {
-      method: "POST",
-      body: { from },
-      token,
-    }),
+  getChat: (
+    token: string,
+    from: string,
+    limit: number = 30,
+    beforeId?: number
+  ): Promise<ChatResponse & { has_more: boolean; total_messages: number }> =>
+    apiFetch<ChatResponse & { has_more: boolean; total_messages: number }>(
+      "/api/c/get_chat",
+      {
+        method: "POST",
+        body: {
+          from,
+          limit,
+          before_id: beforeId,
+        },
+        token,
+      }
+    ),
 
-  getGroup: (token: string, from: number): Promise<ChatResponse> =>
-    apiFetch<ChatResponse>("/api/c/get_group", {
-      method: "POST",
-      body: { from },
-      token,
-    }),
+  getGroup: (
+    token: string,
+    from: number,
+    limit: number = 30,
+    beforeId?: number
+  ): Promise<ChatResponse & { has_more: boolean; total_messages: number }> =>
+    apiFetch<ChatResponse & { has_more: boolean; total_messages: number }>(
+      "/api/c/get_group",
+      {
+        method: "POST",
+        body: {
+          from,
+          limit,
+          before_id: beforeId,
+        },
+        token,
+      }
+    ),
+
+  // Updated method to use the dedicated endpoint
+  getOlderMessages: (
+    token: string,
+    chatId: number | string,
+    beforeMessageId: number,
+    limit: number = 30
+  ): Promise<{ status: boolean; messages: ChatMessage[]; has_more: boolean }> =>
+    apiFetch<{ status: boolean; messages: ChatMessage[]; has_more: boolean }>(
+      "/api/c/get_older_messages",
+      {
+        method: "POST",
+        body: {
+          chat_id: chatId,
+          before_id: beforeMessageId,
+          limit,
+        },
+        token,
+      }
+    ),
 
   createGroup: (token: string, name: string): Promise<GroupResponse> =>
     apiFetch<GroupResponse>("/api/c/create_group", {

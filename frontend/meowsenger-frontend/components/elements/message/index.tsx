@@ -1,8 +1,10 @@
-import React, { useEffect, useState, memo } from "react";
+import React, { useEffect, useState, memo, useCallback, useMemo } from "react";
 import { tv } from "tailwind-variants";
 import { formatDistance } from "date-fns";
 import { useChat } from "@/contexts/chat-context";
 import clsx from "clsx";
+import { MessageMenu } from "@/components/elements/message-menu";
+import { useAuth } from "@/contexts/auth-context";
 
 const messageStyles = tv({
   base: "rounded-lg p-3 max-w-[80%] lowercase relative",
@@ -69,6 +71,41 @@ export interface MessageProps {
   className?: string;
 }
 
+// Custom hook to find message info to reduce calculations in the component
+function useMessageInfo(replyTo?: number, content?: string, sender?: string) {
+  const { currentMessages } = useChat();
+
+  // Find the reply message once and memoize it
+  const replyInfo = useMemo(() => {
+    if (!replyTo || !currentMessages)
+      return { replyMessage: null, replyAuthor: null };
+
+    const foundMessage = currentMessages.find((msg) => msg.id === replyTo);
+    if (foundMessage) {
+      return {
+        replyMessage: foundMessage.text,
+        replyAuthor: foundMessage.author,
+      };
+    }
+    return { replyMessage: null, replyAuthor: null };
+  }, [replyTo, currentMessages]);
+
+  // Find the current message ID
+  const messageId = useMemo(() => {
+    if (!content || !sender || !currentMessages) return undefined;
+
+    const foundMessage = currentMessages.find(
+      (msg) => msg.text === content && msg.author === sender
+    );
+    return foundMessage?.id;
+  }, [content, sender, currentMessages]);
+
+  return {
+    ...replyInfo,
+    messageId,
+  };
+}
+
 export const Message = memo(
   ({
     content,
@@ -82,25 +119,105 @@ export const Message = memo(
     replyTo,
     onReply,
     className,
+    isRead = false,
   }: MessageProps) => {
-    const { currentMessages } = useChat();
-    const [replyMessage, setReplyMessage] = useState<string | null>(null);
-    const [replyAuthor, setReplyAuthor] = useState<string | null>(null);
+    const { editMessage, deleteMessage } = useChat();
+    const { isAdmin } = useAuth();
 
-    // Find the message this is replying to (if any)
-    useEffect(() => {
-      if (replyTo && currentMessages) {
-        const foundMessage = currentMessages.find((msg) => msg.id === replyTo);
-        if (foundMessage) {
-          setReplyMessage(foundMessage.text);
-          setReplyAuthor(foundMessage.author);
-        }
+    // Use the custom hook to get message data
+    const { replyMessage, replyAuthor, messageId } = useMessageInfo(
+      replyTo,
+      content,
+      sender
+    );
+
+    // Memoize the formatted time to avoid unnecessary calculations
+    const formattedTime = useMemo(
+      () =>
+        timestamp
+          ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
+          : "",
+      [timestamp]
+    );
+
+    // Memoize event handlers
+    const handleEdit = useCallback(() => {
+      if (editMessage && messageId) {
+        editMessage(messageId, content);
       }
-    }, [replyTo, currentMessages]);
+    }, [editMessage, messageId, content]);
 
-    const formattedTime = timestamp
-      ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
-      : "";
+    const handleDelete = useCallback(() => {
+      if (deleteMessage && messageId) {
+        deleteMessage(messageId);
+      }
+    }, [deleteMessage, messageId]);
+
+    const handleForward = useCallback(() => {
+      // Implement forwarding logic here
+      console.log("Forward message:", content);
+    }, [content]);
+
+    // Optimized render with useMemo for complex parts
+    const replyComponent = useMemo(() => {
+      if (!replyTo || !replyMessage || isSystem) return null;
+
+      return (
+        <div className={replyStyles({ isOwn })}>
+          <span className="font-medium text-xs">
+            {replyAuthor === sender
+              ? "Replying to self"
+              : `Reply to ${replyAuthor}`}
+            :
+          </span>
+          <div className="text-xs opacity-75 truncate">{replyMessage}</div>
+        </div>
+      );
+    }, [replyTo, replyMessage, isSystem, isOwn, replyAuthor, sender]);
+
+    const senderComponent = useMemo(() => {
+      if (isOwn || isSystem) return null;
+
+      return (
+        <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
+          {sender}
+        </div>
+      );
+    }, [isOwn, isSystem, sender]);
+
+    const messageMenu = useMemo(() => {
+      if (isSystem || isDeleted || isPending) return null;
+
+      return (
+        <div
+          className={clsx(
+            "absolute top-0 group-hover:opacity-100 transition-opacity",
+            isOwn ? "left-[-36px]" : "right-[-36px]"
+          )}
+        >
+          <MessageMenu
+            isOwn={isOwn}
+            isAdmin={isAdmin}
+            messageContent={content}
+            onReply={onReply}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onForward={handleForward}
+          />
+        </div>
+      );
+    }, [
+      isSystem,
+      isDeleted,
+      isPending,
+      isOwn,
+      isAdmin,
+      content,
+      onReply,
+      handleEdit,
+      handleDelete,
+      handleForward,
+    ]);
 
     return (
       <div className={clsx("flex flex-col mb-4", isOwn ? "mr-4" : "ml-4")}>
@@ -112,66 +229,29 @@ export const Message = memo(
             isDeleted,
             className,
           })}
-          onClick={!isSystem && !isDeleted ? onReply : undefined}
         >
-          {/* Reply reference display */}
-          {!!replyTo && replyMessage && !isSystem && (
-            <div className={replyStyles({ isOwn })}>
-              <span className="font-medium text-xs">
-                {replyAuthor === sender
-                  ? "Replying to self"
-                  : `Reply to ${replyAuthor}`}
-                :
-              </span>
-              <div className="text-xs opacity-75 truncate">{replyMessage}</div>
-            </div>
-          )}
+          {replyComponent}
+          {senderComponent}
 
-          {/* Show the sender name only for messages from others, not your own */}
-          {!isOwn && !isSystem && (
-            <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
-              {sender}
-            </div>
-          )}
-
-          <p className="text-sm text-neutral-900 dark:text-neutral-100">
+          <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
             {content}
-            {isEdited && !isDeleted && (
-              <span
-                className="text-xs text-neutral-500 dark:text-neutral-400 ml-1"
-                title="Edited"
-              >
-                (edited)
-              </span>
-            )}
           </p>
 
           {!isSystem && (
             <div
               className={clsx(
-                "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1",
-                isOwn && "justify-end"
+                "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1 justify-between",
+                isOwn ? "flex-row-reverse" : "flex-row"
               )}
             >
               <span className="text-[10px]">{formattedTime}</span>
+              <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                {isEdited && !isDeleted && <span title="Edited">(edited)</span>}
+              </div>
             </div>
           )}
 
-          {/* Message actions - only show on hover for non-system messages */}
-          {!isSystem && !isDeleted && !isPending && (
-            <div className="absolute top-0 right-0 -mt-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-800 rounded-full shadow-sm">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReply?.();
-                }}
-                className="p-1 text-xs text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                title="Reply"
-              >
-                ↩️
-              </button>
-            </div>
-          )}
+          {messageMenu}
         </div>
       </div>
     );

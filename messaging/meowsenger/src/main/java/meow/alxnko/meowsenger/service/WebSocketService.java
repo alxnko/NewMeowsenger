@@ -236,8 +236,9 @@ public class WebSocketService {
         if (chatTypingStatus != null) {
             LocalDateTime lastTyping = chatTypingStatus.get(userId);
             if (lastTyping != null) {
-                // Reduce the rate limit from 1 second to 500ms for more responsive typing indicators
-                if (lastTyping.plusNanos(500000000).isAfter(LocalDateTime.now())) {
+                // Increase the rate limit to 2 seconds to reduce processing overhead
+                // This matches the frontend's new optimized rate of 2 seconds
+                if (lastTyping.plusSeconds(2).isAfter(LocalDateTime.now())) {
                     return;
                 }
             }

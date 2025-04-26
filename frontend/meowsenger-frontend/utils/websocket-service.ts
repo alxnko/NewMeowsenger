@@ -23,6 +23,14 @@ export interface WebSocketMessage {
   chatName?: string; // Name of the chat (for group notifications)
 }
 
+export interface FetchHistoryRequest {
+  chatId: number;
+  userId: number;
+  beforeMessageId?: number;
+  limit: number;
+  timestamp: string;
+}
+
 export type MessageCallback = (message: WebSocketMessage) => void;
 
 class WebSocketService {
@@ -444,17 +452,20 @@ class WebSocketService {
   public sendTypingIndicator(chatId: number): void {
     if (!this.client || !this.connected || !this.userId) return;
 
+    // Create a lighter-weight typing indicator message
     const message: WebSocketMessage = {
       type: "TYPING",
       userId: this.userId,
       chatId: chatId,
-      content: "User is typing",
+      content: "", // Empty content to reduce payload size
       timestamp: new Date().toISOString(),
     };
 
+    // Use sendString instead of publish with JSON.stringify to reduce overhead
     this.client.publish({
       destination: "/app/chat.typing",
       body: JSON.stringify(message),
+      headers: { "content-type": "application/json;minimal=true" },
     });
   }
 
@@ -569,6 +580,48 @@ class WebSocketService {
     this.client.publish({
       destination: "/app/chat.send",
       body: JSON.stringify(message),
+    });
+  }
+
+  /**
+   * Fetch historical messages before a certain message ID or from the beginning
+   * @param chatId The chat ID to fetch messages for
+   * @param beforeMessageId Optional ID of the message to fetch messages before
+   * @param limit Number of messages to fetch (default 50)
+   * @returns Promise that resolves when the history request is sent
+   */
+  public fetchMessageHistory(
+    chatId: number,
+    beforeMessageId?: number,
+    limit: number = 50
+  ): Promise<boolean> {
+    if (!this.client || !this.connected || !this.userId) {
+      console.error("WebSocket not connected. Cannot fetch message history.");
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+      const request: FetchHistoryRequest = {
+        chatId,
+        userId: this.userId!,
+        beforeMessageId,
+        limit,
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log(`Fetching ${limit} messages before ID: ${beforeMessageId || 'beginning'}`);
+      
+      this.client!.publish({
+        destination: "/app/chat.history",
+        body: JSON.stringify(request),
+        headers: { 
+          "content-type": "application/json",
+          "fetch-id": `history-${Date.now()}`  // Add unique ID for tracking this request
+        },
+      });
+
+      // Resolve immediately as the messages will come through the regular subscription
+      resolve(true);
     });
   }
 

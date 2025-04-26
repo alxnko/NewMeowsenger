@@ -1,60 +1,41 @@
-import {
-  createContext,
-  useState,
-  useContext,
-  ReactNode,
-  useCallback,
-} from "react";
-import Toast from "@/components/elements/toast";
+import { createContext, useContext, ReactNode, useCallback } from "react";
+import { ToastProvider as HeroToastProvider, addToast } from "@heroui/toast";
 
 type ToastType = "info" | "success" | "error";
 
-interface ToastData {
-  id: string;
-  message: string;
-  type: ToastType;
-}
-
 interface ToastContextType {
   showToast: (message: string, type?: ToastType) => void;
-  hideToast: (id: string) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<ToastData[]>([]);
-
-  // Show a new toast notification
+  // Show a new toast notification with HeroUI
   const showToast = useCallback((message: string, type: ToastType = "info") => {
-    const id = Date.now().toString();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    // Map our toast types to acceptable variants that HeroUI expects
+    const toastConfig: any = {
+      title: type.charAt(0).toUpperCase() + type.slice(1),
+      description: message,
+      duration: 10000, // 10 seconds
+    };
 
-    // Auto dismiss after 10 seconds (10000ms)
-    setTimeout(() => {
-      hideToast(id);
-    }, 10000);
-  }, []);
+    // Set color instead of variant based on type
+    if (type === "success") {
+      toastConfig.color = "success";
+    } else if (type === "error") {
+      toastConfig.color = "danger";
+    }
 
-  // Hide a specific toast by ID
-  const hideToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    addToast(toastConfig);
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast, hideToast }}>
+    <ToastContext.Provider value={{ showToast }}>
+      <HeroToastProvider
+        placement="top-right"
+        toastProps={{ variant: "bordered", shouldShowTimeoutProgress: true }}
+      />
       {children}
-      <div className="toast-container">
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            message={toast.message}
-            type={toast.type}
-            duration={10000} // 10 seconds
-            onClose={() => hideToast(toast.id)}
-          />
-        ))}
-      </div>
     </ToastContext.Provider>
   );
 }

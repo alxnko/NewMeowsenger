@@ -141,7 +141,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
 
           setValidationErrors(errors);
-          setError("Please correct the errors below");
+          // Create a more descriptive error message showing specific validation issues
+          const errorSummary = Object.entries(errors)
+            .map(([_, message]) => `${message}`)
+            .join(", ");
+          setError(`${errorSummary}`);
         } else {
           setError(err.message);
         }
@@ -191,7 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
 
           setValidationErrors(errors);
-          setError("Please correct the errors below");
+          const errorSummary = Object.entries(errors)
+            .map(([_, message]) => `${message}`)
+            .join(", ");
+          setError(`${errorSummary}`);
         } else {
           setError(err.message);
         }

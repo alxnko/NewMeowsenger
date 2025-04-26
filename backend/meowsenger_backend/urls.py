@@ -64,4 +64,9 @@ urlpatterns = [
     path("api/c/add_admin", chat_views.add_admin, name="add_admin"),
     path("api/c/remove_admin", chat_views.remove_admin, name="remove_admin"),
     path("api/c/save_settings", chat_views.save_settings, name="save_settings"),
+    path(
+        "api/c/get_older_messages",
+        chat_views.get_older_messages,
+        name="get_older_messages",
+    ),
 ]
