@@ -9,7 +9,7 @@ interface WebSocketStatusProps {
 
 export const WebSocketStatus: React.FC<WebSocketStatusProps> = ({
   className = "",
-  showText = true,
+  showText = false,
   size = "md",
 }) => {
   const [isConnected, setIsConnected] = useState(false);

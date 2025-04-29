@@ -104,7 +104,7 @@ const ChatWidget = ({
         </div>
 
         {/* Connection status indicator */}
-        <WebSocketStatus showText={true} size="sm" />
+        <WebSocketStatus size="sm" />
       </div>
 
       {/* Message list */}
