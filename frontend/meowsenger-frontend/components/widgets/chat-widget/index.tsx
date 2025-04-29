@@ -32,7 +32,6 @@ const ChatWidget = ({
   backUrl = "/chats",
   headerContent,
 }: ChatWidgetProps) => {
-  const { user } = useAuth();
   const { t } = useLanguage();
 
   if (loading) {
@@ -69,7 +68,6 @@ const ChatWidget = ({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Chat header */}
       <div className="fixed top-0 right-4 left-1 h-14 flex items-center justify-between border-b dark:border-neutral-800">
         <div className="flex items-center space-x-3">
           <Button
@@ -77,9 +75,10 @@ const ChatWidget = ({
             href={backUrl}
             variant="light"
             size="sm"
+            isIconOnly
             className="py-1"
           >
-            ← {t("back")}
+            ←
           </Button>
           <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center text-success font-medium">
             {chat.name[0].toLowerCase()}
@@ -89,7 +88,9 @@ const ChatWidget = ({
           ) : (
             <div>
               <div className="flex items-center">
-                <h3 className="font-medium lowercase">{chat.name}</h3>
+                <h3 className="font-medium lowercase truncate max-w-[calc(100vw-250px)]">
+                  {chat.name}
+                </h3>
                 {chat.isVerified && (
                   <span className="ml-1 text-success">✓</span>
                 )}

@@ -6,7 +6,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { useParams } from "next/navigation";
 import ChatWidget from "@/components/widgets/chat-widget";
 import Button from "@/components/elements/button";
-import Link from "next/link";
+import { GrTest } from "react-icons/gr";
+import { Modal, ModalContent, ModalHeader, ModalBody } from "@heroui/modal";
+import { FiShield } from "react-icons/fi";
+import { User } from "@heroui/user";
 
 export default function GroupChatPage() {
   const { id } = useParams();
@@ -23,18 +26,13 @@ export default function GroupChatPage() {
 
   // Track WebSocket connection status
   const [isConnected, setIsConnected] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
 
   // Handle connection status changes
   const handleConnectionChange = useCallback((event: StorageEvent) => {
     if (event.key === "ws_connected") {
       setIsConnected(event.newValue === "true");
     }
-  }, []);
-
-  // Toggle showing members list
-  const toggleShowMembers = useCallback(() => {
-    setShowMembers((prev) => !prev);
   }, []);
 
   useEffect(() => {
@@ -68,49 +66,91 @@ export default function GroupChatPage() {
     return (
       <div>
         <div className="flex items-center">
-          <h3 className="font-medium lowercase">{currentChat.name}</h3>
+          <h3 className="font-medium lowercase truncate max-w-[calc(100vw-250px)]">
+            {currentChat.name}
+          </h3>
           {currentChat.isVerified && (
             <span className="ml-1 text-success">✓</span>
           )}
           <Button
-            onClick={toggleShowMembers}
+            onClick={() => setShowMembersModal(true)}
             variant="light"
             size="sm"
             className="ml-2 text-xs h-6 px-1"
           >
-            {showMembers
-              ? "hide members"
-              : currentChat.users?.length === 1
-                ? "1 member"
-                : `${currentChat.users?.length || 0} members`}
+            {currentChat.users?.length === 1
+              ? "1 member"
+              : `${currentChat.users?.length || 0} members`}
           </Button>
         </div>
-
-        {showMembers && (
-          <div className="mt-2 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-md">
-            <h4 className="text-xs font-medium mb-1 lowercase">members:</h4>
-            <ul className="text-xs space-y-1 lowercase">
-              {currentChat.users?.map((user) => (
-                <li key={user.id} className="flex items-center">
-                  {user.username}
-                  {user.is_admin && (
-                    <span className="ml-1 text-success text-xs">(admin)</span>
-                  )}
-                  {user.is_verified && (
-                    <span className="ml-1 text-success">✓</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         <p className="text-sm text-muted-foreground lowercase">
           {currentChat.desc}
         </p>
+
+        <Modal
+          isOpen={showMembersModal}
+          onOpenChange={setShowMembersModal}
+          scrollBehavior="inside"
+          size="sm"
+        >
+          <ModalContent>
+            <ModalHeader className="lowercase">
+              group members ({currentChat.users?.length || 0})
+            </ModalHeader>
+            <ModalBody className="max-h-[60vh] overflow-y-auto py-2">
+              <div className="space-y-3">
+                {currentChat.users?.map((member) => {
+                  const isOwner = currentChat.admins?.[0] === member.username;
+                  const isAdmin = member.is_admin;
+
+                  return (
+                    <User
+                      key={member.id}
+                      avatarProps={{
+                        className: "bg-green-100 text-green-800",
+                        radius: "full",
+                        showFallback: true,
+                        name: member.username.charAt(0).toLowerCase(),
+                      }}
+                      description={
+                        <div className="flex items-center gap-1 lowercase text-neutral-500 dark:text-neutral-400">
+                          {member.is_verified && (
+                            <span className="text-success">✓</span>
+                          )}
+                          {member.is_tester && (
+                            <span>
+                              <GrTest className="mr-1" />
+                            </span>
+                          )}
+                          {isOwner ? (
+                            <span className="flex items-center text-amber-500">
+                              <FiShield className="mr-1" />
+                              owner
+                            </span>
+                          ) : isAdmin ? (
+                            <span className="flex items-center text-yellow-500">
+                              <FiShield className="mr-1" />
+                              admin
+                            </span>
+                          ) : null}
+                        </div>
+                      }
+                      name={
+                        <div className="lowercase font-medium">
+                          {member.username}
+                        </div>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
       </div>
     );
-  }, [currentChat, showMembers, toggleShowMembers]);
+  }, [currentChat, showMembersModal]);
 
   return (
     <ChatWidget
