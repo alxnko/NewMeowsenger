@@ -442,4 +442,135 @@ public class WebSocketService {
             log.error("Error sending new chat notification: {}", e.getMessage());
         }
     }
+    
+    /**
+     * Send a notification when admin status changes for a user
+     */
+    @Transactional
+    public void notifyAdminStatusChanged(Long chatId, Long changedByUserId, String changedByUsername, 
+                                         Long targetUserId, String targetUsername, boolean isPromotion) {
+        try {
+            // Get chat details
+            Chat chat = chatRepository.findById(chatId).orElse(null);
+            
+            if (chat == null) {
+                log.error("Chat not found when notifying admin status change");
+                return;
+            }
+            
+            // Create the notification message with system flag
+            String content = isPromotion 
+                ? changedByUsername + " made " + targetUsername + " an admin" 
+                : changedByUsername + " removed admin rights from " + targetUsername;
+                
+            WebSocketMessage systemMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT)
+                    .chatId(chatId)
+                    .userId(changedByUserId)
+                    .username(changedByUsername)
+                    .content(content)
+                    .timestamp(LocalDateTime.now())
+                    .isSystem(true)  // Mark as system message
+                    .isGroup(chat.isGroup())
+                    .chatName(chat.getName())
+                    .build();
+                    
+            // Process and send this message to all members including the target user
+            processAndSendMessage(systemMessage);
+            
+            // Also send a special admin status update notification directly to the affected user
+            WebSocketMessage statusUpdateMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                    .chatId(chatId)
+                    .userId(changedByUserId)
+                    .username(changedByUsername)
+                    .content(content)
+                    .timestamp(LocalDateTime.now())
+                    .updateType("ADMIN_CHANGED")
+                    .isGroup(chat.isGroup())
+                    .chatName(chat.getName())
+                    .build();
+            
+            // Send to the target user's queue
+            messagingTemplate.convertAndSendToUser(
+                targetUserId.toString(),
+                "/queue/chat-updates", 
+                statusUpdateMessage
+            );
+            
+            // Also send to target user's topic as fallback
+            messagingTemplate.convertAndSend(
+                "/topic/user." + targetUserId + ".chat-updates",
+                statusUpdateMessage
+            );
+            
+            log.info("Sent admin status change notification to user {} for chat {}", targetUserId, chatId);
+        } catch (Exception e) {
+            log.error("Error sending admin status change notification: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send a notification when a user is removed from a chat
+     */
+    @Transactional
+    public void notifyUserRemoved(Long chatId, Long removedByUserId, String removedByUsername, 
+                                 Long targetUserId, String targetUsername) {
+        try {
+            // Get chat details
+            Chat chat = chatRepository.findById(chatId).orElse(null);
+            
+            if (chat == null) {
+                log.error("Chat not found when notifying user removal");
+                return;
+            }
+            
+            // Create system message for the chat
+            String content = removedByUsername + " removed " + targetUsername + " from the group";
+            WebSocketMessage systemMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT)
+                    .chatId(chatId)
+                    .userId(removedByUserId)
+                    .username(removedByUsername)
+                    .content(content)
+                    .timestamp(LocalDateTime.now())
+                    .isSystem(true)  // Mark as system message
+                    .isGroup(chat.isGroup())
+                    .chatName(chat.getName())
+                    .build();
+                    
+            // Process and send this message to all remaining members
+            processAndSendMessage(systemMessage);
+            
+            // Send a special removal notification to the removed user
+            WebSocketMessage removalMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                    .chatId(chatId)
+                    .userId(removedByUserId)
+                    .username(removedByUsername)
+                    .content(content)
+                    .timestamp(LocalDateTime.now())
+                    .updateType("MEMBER_REMOVED")
+                    .isGroup(chat.isGroup())
+                    .chatName(chat.getName())
+                    .build();
+            
+            // Send to the removed user's queue
+            messagingTemplate.convertAndSendToUser(
+                targetUserId.toString(),
+                "/queue/chat-updates", 
+                removalMessage
+            );
+            
+            // Also send to removed user's topic as fallback
+            messagingTemplate.convertAndSend(
+                "/topic/user." + targetUserId + ".chat-updates",
+                removalMessage
+            );
+            
+            log.info("Sent removal notification to user {} for chat {}", targetUserId, chatId);
+        } catch (Exception e) {
+            log.error("Error sending user removal notification: {}", e.getMessage());
+        }
+    }
 }

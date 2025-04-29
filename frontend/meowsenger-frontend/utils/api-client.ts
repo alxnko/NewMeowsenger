@@ -270,6 +270,30 @@ export const chatApi = {
       token,
     }),
 
+  addAdmin: (
+    token: string,
+    from: number,
+    username: string,
+    message: string
+  ): Promise<ApiResponse> =>
+    apiFetch<ApiResponse>("/api/c/add_admin", {
+      method: "POST",
+      body: { from, username, message },
+      token,
+    }),
+
+  removeAdmin: (
+    token: string,
+    from: number,
+    username: string,
+    message: string
+  ): Promise<ApiResponse> =>
+    apiFetch<ApiResponse>("/api/c/remove_admin", {
+      method: "POST",
+      body: { from, username, message },
+      token,
+    }),
+
   sendMessage: (
     token: string,
     to: string | number,

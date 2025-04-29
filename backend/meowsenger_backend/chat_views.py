@@ -558,6 +558,25 @@ def remove_member(request):
         chat.last_time = msg.send_time
         chat.save()
 
+        # Send WebSocket notification about user removal
+        try:
+            import requests
+
+            ws_url = "http://messaging:8081/api/user-removed"
+            requests.post(
+                ws_url,
+                json={
+                    "chatId": chat.id,
+                    "removedByUserId": user.id,
+                    "removedByUsername": user.username,
+                    "targetUserId": target_user.id,
+                    "targetUsername": target_user.username,
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            print(f"Failed to send WebSocket notification: {e}")
+
         return Response({"status": True})
 
     return Response({"status": False})
@@ -599,6 +618,26 @@ def add_admin(request):
         chat.last_time = msg.send_time
         chat.save()
 
+        # Send WebSocket notification about admin status change
+        try:
+            import requests
+
+            ws_url = "http://messaging:8081/api/admin-status-changed"
+            requests.post(
+                ws_url,
+                json={
+                    "chatId": chat.id,
+                    "changedByUserId": user.id,
+                    "changedByUsername": user.username,
+                    "targetUserId": target_user.id,
+                    "targetUsername": target_user.username,
+                    "isPromotion": True,
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            print(f"Failed to send WebSocket notification: {e}")
+
         return Response({"status": True})
 
     return Response({"status": False})
@@ -639,6 +678,26 @@ def remove_admin(request):
         # Update chat's last time
         chat.last_time = msg.send_time
         chat.save()
+
+        # Send WebSocket notification about admin status change
+        try:
+            import requests
+
+            ws_url = "http://messaging:8081/api/admin-status-changed"
+            requests.post(
+                ws_url,
+                json={
+                    "chatId": chat.id,
+                    "changedByUserId": user.id,
+                    "changedByUsername": user.username,
+                    "targetUserId": target_user.id,
+                    "targetUsername": target_user.username,
+                    "isPromotion": False,
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            print(f"Failed to send WebSocket notification: {e}")
 
         return Response({"status": True})
 

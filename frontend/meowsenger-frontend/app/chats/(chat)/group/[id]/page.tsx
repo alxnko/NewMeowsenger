@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useChat } from "@/contexts/chat-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useParams } from "next/navigation";
@@ -22,10 +22,18 @@ import {
   FiUserMinus,
   FiUser,
   FiEdit,
+  FiChevronDown,
+  FiMoreVertical,
 } from "react-icons/fi";
 import { User } from "@heroui/user";
 import { Chip } from "@heroui/chip";
 import { useLanguage } from "@/contexts/language-context";
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
+} from "@heroui/dropdown";
 
 export default function GroupChatPage() {
   const { id } = useParams();
@@ -42,6 +50,8 @@ export default function GroupChatPage() {
     saveSettings,
     addMember,
     removeMember,
+    addAdmin,
+    removeAdmin,
   } = useChat();
 
   const [isConnected, setIsConnected] = useState(false);
@@ -58,6 +68,9 @@ export default function GroupChatPage() {
     "add" | "remove" | "promote" | "demote" | null
   >(null);
   const [showUserActionModal, setShowUserActionModal] = useState(false);
+
+  // Reference to clicked member dropdown to position it properly
+  const memberDropdownRef = useRef<HTMLDivElement>(null);
 
   const handleConnectionChange = useCallback((event: StorageEvent) => {
     if (event.key === "ws_connected") {
@@ -139,19 +152,15 @@ export default function GroupChatPage() {
           selectedUser,
           `${user.username} removed ${selectedUser} from the group`
         );
-      } else if (
-        (userActionType === "promote" || userActionType === "demote") &&
-        selectedUser
-      ) {
-        const isPromote = userActionType === "promote";
-        const action = isPromote ? "promoted" : "demoted";
-
-        const actionMessage = `${user.username} ${action} ${selectedUser} [ADMIN_ACTION:${isPromote ? "PROMOTE" : "DEMOTE"}]`;
-
-        await saveSettings(
-          currentChat.name,
-          currentChat.desc || "",
-          actionMessage
+      } else if (userActionType === "promote" && selectedUser) {
+        await addAdmin(
+          selectedUser,
+          `${user.username} made ${selectedUser} an admin`
+        );
+      } else if (userActionType === "demote" && selectedUser) {
+        await removeAdmin(
+          selectedUser,
+          `${user.username} removed admin rights from ${selectedUser}`
         );
       }
 
@@ -229,11 +238,15 @@ export default function GroupChatPage() {
               <div className="space-y-3">
                 {currentChat.users?.map((member) => {
                   const isOwner = currentChat.admins?.[0] === member.username;
-                  const isAdmin = member.is_admin;
+                  const isMemberAdmin =
+                    member.is_admin ||
+                    currentChat.admins?.includes(member.username);
                   const isCurrentUser = member.username === user.username;
+                  // Current user can only manage other members if they're an admin
+                  const canManageMember = isAdmin && !isCurrentUser && !isOwner;
 
                   return (
-                    <div key={member.id} className="flex items-center">
+                    <div key={member.id} className="flex items-center relative">
                       <User
                         className="flex-1 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800"
                         avatarProps={{
@@ -266,7 +279,7 @@ export default function GroupChatPage() {
                                   owner
                                 </Chip>
                               )}
-                              {!isOwner && isAdmin && (
+                              {!isOwner && isMemberAdmin && (
                                 <Chip
                                   size="sm"
                                   variant="flat"
@@ -299,39 +312,79 @@ export default function GroupChatPage() {
                         }
                       />
 
-                      {isAdmin && !isCurrentUser && !isOwner && (
-                        <div className="flex space-x-1 ml-1">
-                          <Button
-                            size="sm"
-                            variant="light"
-                            color="danger"
-                            title="Remove from group"
-                            isIconOnly
-                            onClick={() =>
-                              openUserActionModal("remove", member.username)
-                            }
-                          >
-                            <FiUserMinus size={16} />
-                          </Button>
-                        </div>
-                      )}
+                      {/* Dropdown menu for member management */}
+                      {canManageMember && (
+                        <div className="ml-1" ref={memberDropdownRef}>
+                          <Dropdown>
+                            <DropdownTrigger>
+                              <Button
+                                size="sm"
+                                variant="light"
+                                isIconOnly
+                                className="text-neutral-500"
+                              >
+                                <FiMoreVertical size={16} />
+                              </Button>
+                            </DropdownTrigger>
+                            <DropdownMenu aria-label="Member actions">
+                              <DropdownItem
+                                key="remove"
+                                className="text-danger lowercase"
+                                startContent={
+                                  <FiUserMinus
+                                    className="text-danger"
+                                    size={16}
+                                  />
+                                }
+                                onClick={() =>
+                                  openUserActionModal("remove", member.username)
+                                }
+                              >
+                                remove from group
+                              </DropdownItem>
 
-                      {isAdmin && !isCurrentUser && !isOwner && (
-                        <Button
-                          size="sm"
-                          variant="light"
-                          color={isAdmin ? "warning" : "success"}
-                          title={isAdmin ? "Remove admin status" : "Make admin"}
-                          isIconOnly
-                          onClick={() =>
-                            openUserActionModal(
-                              isAdmin ? "demote" : "promote",
-                              member.username
-                            )
-                          }
-                        >
-                          <FiShield size={16} />
-                        </Button>
+                              {isMemberAdmin ? (
+                                <DropdownItem
+                                  key="demote"
+                                  className="text-warning lowercase"
+                                  startContent={
+                                    <FiShield
+                                      className="text-warning"
+                                      size={16}
+                                    />
+                                  }
+                                  onClick={() =>
+                                    openUserActionModal(
+                                      "demote",
+                                      member.username
+                                    )
+                                  }
+                                >
+                                  remove admin rights
+                                </DropdownItem>
+                              ) : (
+                                <DropdownItem
+                                  key="promote"
+                                  className="text-success lowercase"
+                                  startContent={
+                                    <FiShield
+                                      className="text-success"
+                                      size={16}
+                                    />
+                                  }
+                                  onClick={() =>
+                                    openUserActionModal(
+                                      "promote",
+                                      member.username
+                                    )
+                                  }
+                                >
+                                  make admin
+                                </DropdownItem>
+                              )}
+                            </DropdownMenu>
+                          </Dropdown>
+                        </div>
                       )}
                     </div>
                   );

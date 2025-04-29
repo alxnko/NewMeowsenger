@@ -10,7 +10,9 @@ export interface WebSocketMessage {
     | "ERROR"
     | "TYPING"
     | "READ"
-    | "CHAT_UPDATE";
+    | "CHAT_UPDATE"
+    | "ADMIN_STATUS_CHANGE" // New type for admin status change notifications
+    | "USER_REMOVED"; // New type for user removal notifications
   chatId: number;
   userId: number;
   content: string;
@@ -31,7 +33,21 @@ export interface WebSocketMessage {
   chatName?: string; // Name of the chat (for group notifications)
 
   // Update type for CHAT_UPDATE messages
-  updateType?: "NEW_CHAT" | "MEMBER_ADDED" | string;
+  updateType?:
+    | "NEW_CHAT"
+    | "MEMBER_ADDED"
+    | "MEMBER_REMOVED"
+    | "ADMIN_CHANGED"
+    | string;
+
+  // Admin status change fields
+  targetUserId?: number; // ID of the user whose admin status changed
+  targetUsername?: string; // Username of the user whose admin status changed
+  changedByUsername?: string; // Username of the user who changed the admin status
+  isPromotion?: boolean; // Whether the user was promoted or demoted
+
+  // User removal fields
+  removedByUsername?: string; // Username of the user who removed someone
 }
 
 export type MessageCallback = (message: WebSocketMessage) => void;
@@ -56,50 +72,69 @@ class WebSocketService {
    * Initialize the WebSocket connection
    */
   public connect(userId: number, token: string): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      if (this.client) {
-        this.disconnect();
+    return new Promise((resolve) => {
+      if (this.client && this.connected) {
+        console.log("[WebSocket] Already connected");
+        resolve(true);
+        return;
       }
 
       this.userId = userId;
+      console.log("[WebSocket] Attempting to connect...");
 
+      // Create a new STOMP client over SockJS
       this.client = new Client({
         webSocketFactory: () => new SockJS(this.WS_URL),
         connectHeaders: {
           Authorization: `Bearer ${token}`,
         },
-        debug: function (str: any) {
-          // Reducing debug noise
-          if (!str.includes("heart-beat") && !str.includes("Heartbeat")) {
-            console.log("STOMP: " + str);
+        debug: (msg) => {
+          console.log("[STOMP]", msg);
+          // Log all received message bodies for debugging
+          if (msg.includes("MESSAGE") && msg.includes("destination:")) {
+            try {
+              const bodyStart = msg.indexOf("body:");
+              if (bodyStart !== -1) {
+                const body = msg.substring(bodyStart + 5).trim();
+                const parsedBody = JSON.parse(body);
+                console.log("[STOMP] Received message body:", parsedBody);
+              }
+            } catch (error) {
+              console.error("[STOMP] Error parsing message body:", error);
+            }
           }
         },
         reconnectDelay: 5000,
-        heartbeatIncoming: 30000, // Increased from 4000
-        heartbeatOutgoing: 30000, // Increased from 4000
-        // Adding more stability with retry parameters
+        heartbeatIncoming: 30000,
+        heartbeatOutgoing: 30000,
       });
 
-      // Add property to track last reconnect time to avoid rapid reconnection cycles
-      let lastReconnectTime = 0;
+      // Set connection timeout
+      const connectionTimeout = setTimeout(() => {
+        console.error("[WebSocket] Connection timed out");
+        this.client = null;
+        this.connected = false;
+        resolve(false);
+      }, 10000); // 10 seconds timeout
 
       this.client.onConnect = (frame: IFrame) => {
-        console.log("WebSocket Connected: " + frame);
+        clearTimeout(connectionTimeout);
+        console.log("[WebSocket] Connected successfully");
         this.connected = true;
-        this.reconnectAttempts = 0;
-        lastReconnectTime = 0;
 
-        // Store connection status in sessionStorage
+        // Update session storage and notify other tabs
         sessionStorage.setItem("ws_connected", "true");
-        // Trigger an event to notify other components
         window.dispatchEvent(
-          new StorageEvent("storage", { key: "ws_connected", newValue: "true" })
+          new StorageEvent("storage", {
+            key: "ws_connected",
+            newValue: "true",
+          })
         );
 
         // Register the user
         this.registerUser(userId);
 
-        // Resubscribe to previously subscribed topics
+        // Resubscribe to previous topics
         this.resubscribe();
 
         // Send any queued messages
@@ -109,10 +144,16 @@ class WebSocketService {
       };
 
       this.client.onStompError = (frame: IFrame) => {
-        console.error("WebSocket Error: " + frame.headers["message"]);
+        clearTimeout(connectionTimeout);
+        console.error(
+          "[WebSocket] Connection error:",
+          frame.headers["message"]
+        );
         console.error("Additional details: " + frame.body);
+        this.connected = false;
+        this.client = null;
 
-        // Update connection status
+        // Update session storage and notify other tabs
         sessionStorage.setItem("ws_connected", "false");
         window.dispatchEvent(
           new StorageEvent("storage", {
@@ -121,7 +162,7 @@ class WebSocketService {
           })
         );
 
-        reject(new Error(frame.headers["message"]));
+        resolve(false);
       };
 
       this.client.onWebSocketClose = () => {
@@ -170,7 +211,7 @@ class WebSocketService {
           })
         );
 
-        reject(error);
+        resolve(false);
       }
     });
   }
@@ -433,6 +474,109 @@ class WebSocketService {
       callback,
     });
     return userSubscription.id;
+  }
+
+  /**
+   * Subscribe to admin status change notifications
+   */
+  public subscribeToAdminStatusChanges(
+    userId: number,
+    callback: MessageCallback
+  ): string {
+    if (!this.client || !this.connected) {
+      console.warn(
+        "WebSocket not connected. Will subscribe when connection is established."
+      );
+      return "";
+    }
+
+    const subscriptionKey = `admin_changes_${userId}`;
+
+    if (this.subscriptions.has(subscriptionKey)) {
+      return this.subscriptions.get(subscriptionKey)!.id;
+    }
+
+    // Subscribe to user-specific destination for admin status changes
+    // Note: Backend sends these messages to the chat-updates queue, not a dedicated admin-status queue
+    const userDestination = `/user/${userId}/queue/chat-updates`;
+    console.log(`Subscribing to admin status changes: ${userDestination}`);
+
+    const subscription = this.client.subscribe(
+      userDestination,
+      (message: IMessage) => {
+        try {
+          const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+
+          // Only process CHAT_UPDATE messages with updateType ADMIN_CHANGED
+          if (
+            receivedMessage.type === "CHAT_UPDATE" &&
+            receivedMessage.updateType === "ADMIN_CHANGED"
+          ) {
+            console.log(
+              "Received admin status change notification:",
+              receivedMessage
+            );
+            callback(receivedMessage);
+          }
+        } catch (error) {
+          console.error("Error parsing admin status change message:", error);
+        }
+      }
+    );
+
+    this.subscriptions.set(subscriptionKey, { id: subscription.id, callback });
+    return subscription.id;
+  }
+
+  /**
+   * Subscribe to user removal notifications
+   */
+  public subscribeToUserRemovals(
+    userId: number,
+    callback: MessageCallback
+  ): string {
+    if (!this.client || !this.connected) {
+      console.warn(
+        "WebSocket not connected. Will subscribe when connection is established."
+      );
+      return "";
+    }
+
+    const subscriptionKey = `user_removals_${userId}`;
+
+    if (this.subscriptions.has(subscriptionKey)) {
+      return this.subscriptions.get(subscriptionKey)!.id;
+    }
+
+    // Subscribe to user-specific destination for removal notifications
+    // Note: Backend sends these messages to the chat-updates queue, not a dedicated user-removed queue
+    const userDestination = `/user/${userId}/queue/chat-updates`;
+    console.log(
+      `Subscribing to user removal notifications: ${userDestination}`
+    );
+
+    const subscription = this.client.subscribe(
+      userDestination,
+      (message: IMessage) => {
+        try {
+          const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+
+          // Only process CHAT_UPDATE messages with updateType MEMBER_REMOVED
+          if (
+            receivedMessage.type === "CHAT_UPDATE" &&
+            receivedMessage.updateType === "MEMBER_REMOVED"
+          ) {
+            console.log("Received user removal notification:", receivedMessage);
+            callback(receivedMessage);
+          }
+        } catch (error) {
+          console.error("Error parsing user removal message:", error);
+        }
+      }
+    );
+
+    this.subscriptions.set(subscriptionKey, { id: subscription.id, callback });
+    return subscription.id;
   }
 
   /**
@@ -765,6 +909,97 @@ class WebSocketService {
 
           // Update subscription ID
           this.subscriptions.set(key, { id: newSubscription.id, callback });
+        }
+      } else if (
+        key.startsWith("chat_updates_") ||
+        key.startsWith("admin_changes_") ||
+        key.startsWith("user_removals_")
+      ) {
+        // Handle all chat updates including admin status changes and user removals which use the same endpoint
+        const userId = parseInt(
+          key.replace(/^(chat_updates_|admin_changes_|user_removals_)/, ""),
+          10
+        );
+        if (!isNaN(userId)) {
+          console.log(`Resubscribing to chat updates for user ${userId}`);
+
+          // All these notifications use the same endpoint
+          const destination = `/user/${userId}/queue/chat-updates`;
+
+          const newSubscription = this.client!.subscribe(
+            destination,
+            (message: IMessage) => {
+              try {
+                const receivedMessage: WebSocketMessage = JSON.parse(
+                  message.body
+                );
+
+                // For admin_changes_ we only want ADMIN_CHANGED updates
+                if (
+                  key.startsWith("admin_changes_") &&
+                  !(
+                    receivedMessage.type === "CHAT_UPDATE" &&
+                    receivedMessage.updateType === "ADMIN_CHANGED"
+                  )
+                ) {
+                  return;
+                }
+
+                // For user_removals_ we only want MEMBER_REMOVED updates
+                if (
+                  key.startsWith("user_removals_") &&
+                  !(
+                    receivedMessage.type === "CHAT_UPDATE" &&
+                    receivedMessage.updateType === "MEMBER_REMOVED"
+                  )
+                ) {
+                  return;
+                }
+
+                callback(receivedMessage);
+              } catch (error) {
+                console.error("Error parsing chat update message:", error);
+              }
+            }
+          );
+
+          // Update subscription ID
+          this.subscriptions.set(key, { id: newSubscription.id, callback });
+
+          // Also subscribe to broadcast topic as fallback
+          const broadcastDestination = `/topic/user.${userId}.chat-updates`;
+          this.client!.subscribe(broadcastDestination, (message: IMessage) => {
+            try {
+              const receivedMessage: WebSocketMessage = JSON.parse(
+                message.body
+              );
+
+              // Apply same filtering as above
+              if (
+                key.startsWith("admin_changes_") &&
+                !(
+                  receivedMessage.type === "CHAT_UPDATE" &&
+                  receivedMessage.updateType === "ADMIN_CHANGED"
+                )
+              ) {
+                return;
+              }
+
+              if (
+                key.startsWith("user_removals_") &&
+                !(
+                  receivedMessage.type === "CHAT_UPDATE" &&
+                  receivedMessage.updateType === "MEMBER_REMOVED"
+                )
+              ) {
+                return;
+              }
+
+              callback(receivedMessage);
+            } catch (error) {
+              console.error("Error parsing chat update message:", error);
+            }
+          });
         }
       }
     });
