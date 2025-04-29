@@ -36,6 +36,9 @@ public class WebSocketMessage {
     private Boolean isGroup;        // Whether this is a group chat
     private String chatName;        // Name of the chat (for group notifications)
     
+    // For chat updates
+    private String updateType;      // Type of update (NEW_CHAT, MEMBER_ADDED, etc.)
+    
     public enum MessageType {
         CHAT,       // Regular chat message
         JOIN,       // User joining a chat
@@ -43,6 +46,7 @@ public class WebSocketMessage {
         SUBSCRIBE,  // User subscribing to a chat
         ERROR,      // Error message
         TYPING,     // User is typing
-        READ        // Message read receipt
+        READ,       // Message read receipt
+        CHAT_UPDATE // Chat membership or creation update
     }
 }

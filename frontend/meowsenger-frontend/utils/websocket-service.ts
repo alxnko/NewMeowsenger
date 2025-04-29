@@ -2,7 +2,15 @@ import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 export interface WebSocketMessage {
-  type: "CHAT" | "JOIN" | "LEAVE" | "SUBSCRIBE" | "ERROR" | "TYPING" | "READ";
+  type:
+    | "CHAT"
+    | "JOIN"
+    | "LEAVE"
+    | "SUBSCRIBE"
+    | "ERROR"
+    | "TYPING"
+    | "READ"
+    | "CHAT_UPDATE";
   chatId: number;
   userId: number;
   content: string;
@@ -21,6 +29,9 @@ export interface WebSocketMessage {
   // Group chat related fields
   isGroup?: boolean; // Whether this is a group chat
   chatName?: string; // Name of the chat (for group notifications)
+
+  // Update type for CHAT_UPDATE messages
+  updateType?: "NEW_CHAT" | "MEMBER_ADDED" | string;
 }
 
 export type MessageCallback = (message: WebSocketMessage) => void;
@@ -365,6 +376,63 @@ class WebSocketService {
 
     this.subscriptions.set(subscriptionKey, { id: subscription.id, callback });
     return subscription.id;
+  }
+
+  /**
+   * Subscribe to chat updates like new chats, added to group, etc.
+   */
+  public subscribeToChatUpdates(
+    userId: number,
+    callback: MessageCallback
+  ): string {
+    if (!this.client || !this.connected) {
+      console.warn(
+        "WebSocket not connected. Will subscribe when connection is established."
+      );
+      return "";
+    }
+
+    const subscriptionKey = `chat_updates_${userId}`;
+
+    if (this.subscriptions.has(subscriptionKey)) {
+      return this.subscriptions.get(subscriptionKey)!.id;
+    }
+
+    // Subscribe to the user-specific destination for chat updates
+    const userDestination = `/user/${userId}/queue/chat-updates`;
+    console.log(`Subscribing to chat updates: ${userDestination}`);
+
+    const userSubscription = this.client.subscribe(
+      userDestination,
+      (message: IMessage) => {
+        try {
+          console.log("Received chat update notification");
+          const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+          callback(receivedMessage);
+        } catch (error) {
+          console.error("Error parsing chat update message:", error);
+        }
+      }
+    );
+
+    // Also subscribe to the broadcast topic as a fallback
+    const broadcastDestination = `/topic/user.${userId}.chat-updates`;
+
+    this.client.subscribe(broadcastDestination, (message: IMessage) => {
+      try {
+        console.log("Received chat update on broadcast channel");
+        const receivedMessage: WebSocketMessage = JSON.parse(message.body);
+        callback(receivedMessage);
+      } catch (error) {
+        console.error("Error parsing chat update message:", error);
+      }
+    });
+
+    this.subscriptions.set(subscriptionKey, {
+      id: userSubscription.id,
+      callback,
+    });
+    return userSubscription.id;
   }
 
   /**

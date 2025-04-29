@@ -150,6 +150,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [error, showToast]);
 
+  // Handle WebSocket chat update messages (new chats, added to groups)
+  const handleChatUpdateMessage = useCallback(
+    (message: WebSocketMessage) => {
+      console.log("Received chat update message:", message);
+
+      if (message.type === "CHAT_UPDATE") {
+        // Refresh the chat list to show the new/updated chat
+        fetchChats();
+
+        // Show a notification to the user
+        if (message.updateType === "NEW_CHAT") {
+          showToast(`You were added to ${message.chatName}`, "info");
+        } else if (message.updateType === "MEMBER_ADDED") {
+          showToast(message.content, "info");
+        }
+      }
+    },
+    [showToast]
+  );
+
   // Connect to WebSocket when user is authenticated
   useEffect(() => {
     if (!token || !user || !user.id) return;
@@ -159,6 +179,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const connected = await websocketService.connect(user.id, token);
         setWsConnected(connected);
         console.log("WebSocket connected:", connected);
+
+        // Subscribe to chat updates (new chats, added to groups, etc.)
+        if (connected) {
+          websocketService.subscribeToChatUpdates(
+            user.id,
+            handleChatUpdateMessage
+          );
+        }
       } catch (err) {
         console.error("WebSocket connection error:", err);
         setError("Failed to connect to real-time messaging service");
@@ -172,7 +200,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       websocketService.disconnect();
       setWsConnected(false);
     };
-  }, [token, user]);
+  }, [token, user, handleChatUpdateMessage]);
+
+  // Set up periodic chat list refresh to catch new chats
+  useEffect(() => {
+    if (!token) return;
+
+    // Fetch chats initially
+    fetchChats();
+
+    // Set up periodic polling as a fallback to WebSocket
+    const interval = setInterval(() => {
+      fetchChats();
+    }, 10000); // Check for new chats every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [token]);
 
   // Set up WebSocket listeners for read receipts
   useEffect(() => {

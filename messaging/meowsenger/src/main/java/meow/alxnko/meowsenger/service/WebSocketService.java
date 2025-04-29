@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -346,5 +347,99 @@ public class WebSocketService {
                 message.getMessageId(), 
                 message.getIsDeleted() ? "DELETE" : "EDIT", 
                 chatId);
+    }
+    
+    /**
+     * Send a notification when a user is added to a chat
+     */
+    @Transactional
+    public void notifyChatMemberAdded(Long chatId, Long userId, String addedUsername) {
+        try {
+            // Get chat details
+            Chat chat = chatRepository.findById(chatId).orElse(null);
+            User user = userRepository.findById(userId).orElse(null);
+            
+            if (chat == null || user == null) {
+                log.error("Chat or user not found when notifying chat member added");
+                return;
+            }
+            
+            // Create the notification message
+            WebSocketMessage chatUpdateMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                    .chatId(chatId)
+                    .userId(userId)
+                    .username(user.getUsername())
+                    .content(addedUsername + " was added to " + chat.getName())
+                    .timestamp(LocalDateTime.now())
+                    .isGroup(chat.isGroup())
+                    .chatName(chat.getName())
+                    .updateType("MEMBER_ADDED")
+                    .build();
+            
+            // Send notification to the user who was added
+            User addedUser = userRepository.findByUsername(addedUsername).orElse(null);
+            if (addedUser != null) {
+                messagingTemplate.convertAndSendToUser(
+                    addedUser.getId().toString(),
+                    "/queue/chat-updates", 
+                    chatUpdateMessage
+                );
+                
+                // Also send to user's topic as fallback
+                messagingTemplate.convertAndSend(
+                    "/topic/user." + addedUser.getId() + ".chat-updates",
+                    chatUpdateMessage
+                );
+                
+                log.info("Sent chat update notification to user {} for chat {}", addedUser.getId(), chatId);
+            }
+        } catch (Exception e) {
+            log.error("Error sending chat member added notification: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send a notification when a new chat is created
+     */
+    @Transactional
+    public void notifyNewChatCreated(Chat chat, User creator, List<User> members) {
+        try {
+            for (User member : members) {
+                // Skip the creator (they'll know they created it)
+                if (member.getId().equals(creator.getId())) {
+                    continue;
+                }
+                
+                WebSocketMessage newChatMessage = WebSocketMessage.builder()
+                        .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                        .chatId(chat.getId())
+                        .userId(creator.getId())
+                        .username(creator.getUsername())
+                        .content("You were added to " + chat.getName())
+                        .timestamp(LocalDateTime.now())
+                        .isGroup(chat.isGroup())
+                        .chatName(chat.getName())
+                        .updateType("NEW_CHAT")
+                        .build();
+                
+                // Send to user's queue
+                messagingTemplate.convertAndSendToUser(
+                    member.getId().toString(),
+                    "/queue/chat-updates", 
+                    newChatMessage
+                );
+                
+                // Also send to user's topic as fallback
+                messagingTemplate.convertAndSend(
+                    "/topic/user." + member.getId() + ".chat-updates",
+                    newChatMessage
+                );
+                
+                log.info("Sent new chat notification to user {} for chat {}", member.getId(), chat.getId());
+            }
+        } catch (Exception e) {
+            log.error("Error sending new chat notification: {}", e.getMessage());
+        }
     }
 }
