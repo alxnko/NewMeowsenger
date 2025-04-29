@@ -68,6 +68,7 @@ export interface MessageProps {
   isSystem?: boolean;
   replyTo?: number;
   onReply?: () => void;
+  onEdit?: () => void;
   className?: string;
 }
 
@@ -118,6 +119,7 @@ export const Message = memo(
     isSystem = false,
     replyTo,
     onReply,
+    onEdit,
     className,
     isRead = false,
   }: MessageProps) => {
@@ -142,10 +144,12 @@ export const Message = memo(
 
     // Memoize event handlers
     const handleEdit = useCallback(() => {
-      if (editMessage && messageId) {
+      if (onEdit) {
+        onEdit();
+      } else if (editMessage && messageId) {
         editMessage(messageId, content);
       }
-    }, [editMessage, messageId, content]);
+    }, [editMessage, messageId, content, onEdit]);
 
     const handleDelete = useCallback(() => {
       if (deleteMessage && messageId) {

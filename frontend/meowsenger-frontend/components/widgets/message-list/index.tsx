@@ -14,6 +14,7 @@ import { ChatMessage, useChat } from "@/contexts/chat-context";
 import { useAuth } from "@/contexts/auth-context";
 import clsx from "clsx";
 import { BiSolidSend } from "react-icons/bi";
+import { FiX } from "react-icons/fi";
 
 // Styles remain the same
 const messageListStyles = tv({
@@ -43,6 +44,11 @@ const typingIndicatorStyles = tv({
 // Loading indicator styles
 const loadingIndicatorStyles = tv({
   base: "flex items-center justify-center p-2 text-sm text-neutral-500 dark:text-neutral-400",
+});
+
+// Edit indicator styles
+const editIndicatorStyles = tv({
+  base: "flex items-center px-3 py-2 text-xs text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/60 border border-amber-100 dark:border-amber-800 rounded-md my-1 shadow-sm",
 });
 
 // Constants for typing debounce values
@@ -82,10 +88,12 @@ const MemoizedMessage = memo(
     message,
     username,
     onReply,
+    onEdit,
   }: {
     message: MessageData;
     username: string | undefined;
     onReply: (message: MessageData) => void;
+    onEdit: (message: MessageData) => void;
   }) => (
     <Message
       content={message.content}
@@ -98,6 +106,7 @@ const MemoizedMessage = memo(
       isSystem={message.isSystem}
       replyTo={message.replyTo}
       onReply={() => onReply(message)}
+      onEdit={() => onEdit(message)}
     />
   )
 );
@@ -115,6 +124,9 @@ export const MessageList = memo(
   }: MessageListProps) => {
     const [newMessage, setNewMessage] = useState("");
     const [replyTo, setReplyTo] = useState<MessageData | undefined>(undefined);
+    const [editMessage, setEditMessage] = useState<MessageData | undefined>(
+      undefined
+    );
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messageContainerRef = useRef<HTMLDivElement>(null);
     const prevMessagesLength = useRef(0);
@@ -126,6 +138,7 @@ export const MessageList = memo(
       loadOlderMessages,
       isLoadingOlderMessages,
       hasMoreMessages,
+      editMessage: updateMessage,
     } = useChat();
     const typingTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
     const lastTypingTimestamp = useRef<number>(0);
@@ -144,6 +157,13 @@ export const MessageList = memo(
 
     // Prevent loading messages multiple times in succession
     const isLoadingRef = useRef(false);
+
+    // Set input focus when editing message
+    useEffect(() => {
+      if (editMessage) {
+        setNewMessage(editMessage.content);
+      }
+    }, [editMessage]);
 
     // Memoized functions to prevent recreating them on each render
     const scrollToBottom = useCallback(
@@ -380,8 +400,15 @@ export const MessageList = memo(
           const container = messageContainerRef.current;
           const wasAtBottom = isAtBottom();
 
-          // Send the message
-          onSendMessage(newMessage, Number(replyTo?.id));
+          if (editMessage) {
+            // Update existing message
+            updateMessage(Number(editMessage.id), newMessage);
+            setEditMessage(undefined);
+          } else {
+            // Send new message
+            onSendMessage(newMessage, Number(replyTo?.id));
+          }
+
           setNewMessage("");
           setReplyTo(undefined);
 
@@ -394,15 +421,46 @@ export const MessageList = memo(
           }
         }
       },
-      [newMessage, replyTo, onSendMessage, isAtBottom]
+      [
+        newMessage,
+        replyTo,
+        editMessage,
+        onSendMessage,
+        updateMessage,
+        isAtBottom,
+      ]
     );
 
-    const handleReply = useCallback((message: MessageData) => {
-      setReplyTo(message);
-    }, []);
+    const handleReply = useCallback(
+      (message: MessageData) => {
+        setReplyTo(message);
+        // Clear any edit state when replying
+        if (editMessage) {
+          setEditMessage(undefined);
+          setNewMessage("");
+        }
+      },
+      [editMessage]
+    );
+
+    const handleEdit = useCallback(
+      (message: MessageData) => {
+        setEditMessage(message);
+        // Clear any reply state when editing
+        if (replyTo) {
+          setReplyTo(undefined);
+        }
+      },
+      [replyTo]
+    );
 
     const cancelReply = useCallback(() => {
       setReplyTo(undefined);
+    }, []);
+
+    const cancelEdit = useCallback(() => {
+      setEditMessage(undefined);
+      setNewMessage("");
     }, []);
 
     // Optimized input change handler with better debouncing
@@ -416,7 +474,7 @@ export const MessageList = memo(
         }
 
         // Only process typing indicator logic if necessary
-        if (value.trim() && currentChat) {
+        if (value.trim() && currentChat && !editMessage) {
           inputChangeDebounce.current = setTimeout(() => {
             const now = Date.now();
             const timeSinceLastTyping = now - lastTypingTimestamp.current;
@@ -447,7 +505,7 @@ export const MessageList = memo(
           }, 100);
         }
       },
-      [currentChat, sendTypingIndicator]
+      [currentChat, sendTypingIndicator, editMessage]
     );
 
     // Memoize message data conversion to avoid recalculation on every render
@@ -507,6 +565,17 @@ export const MessageList = memo(
       );
     }, [currentlyTypingUsers]);
 
+    // Edit indicator component
+    const editIndicator = useMemo(() => {
+      if (!editMessage) return null;
+
+      return (
+        <div className={editIndicatorStyles()}>
+          <span>editing message: "{editMessage.content}"</span>
+        </div>
+      );
+    }, [editMessage]);
+
     // Memoize scroll button click handler
     const handleScrollButtonClick = useCallback(
       () => scrollToBottom(),
@@ -530,7 +599,7 @@ export const MessageList = memo(
         <div
           className={clsx(
             "flex-1 overflow-y-auto relative will-change-transform",
-            replyTo ? "mb-20" : "mb-6"
+            replyTo || editMessage ? "mb-20" : "mb-6"
           )}
           ref={messageContainerRef}
         >
@@ -560,6 +629,7 @@ export const MessageList = memo(
                   message={message}
                   username={user?.username}
                   onReply={handleReply}
+                  onEdit={handleEdit}
                 />
               </div>
             ))
@@ -575,7 +645,7 @@ export const MessageList = memo(
             <Button
               className={clsx(
                 scrollButtonStyles({ hasNewMessages: unreadCount > 0 }),
-                replyTo ? "bottom-32" : "bottom-16"
+                replyTo || editMessage ? "bottom-32" : "bottom-16"
               )}
               isIconOnly
               aria-label="Scroll to bottom"
@@ -604,20 +674,37 @@ export const MessageList = memo(
                 Replying to {replyTo.sender.name}: "{replyTo.content}"
               </div>
               <Button variant="ghost" size="sm" onClick={cancelReply}>
-                ✕
+                <FiX />
               </Button>
             </div>
           )}
+
+          {editMessage && (
+            <div className="py-2 border-t dark:border-neutral-800 flex items-center justify-between">
+              <div className="text-sm text-amber-600 dark:text-amber-400">
+                Editing message: "{editMessage.content}"
+              </div>
+              <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                <FiX />
+              </Button>
+            </div>
+          )}
+
           <form onSubmit={handleSendMessage} className="flex pt-2 gap-2">
             <Input
               value={newMessage}
               onChange={handleInputChange}
               placeholder={
-                isConnected ? "type a message..." : "reconnecting..."
+                editMessage
+                  ? "edit your message..."
+                  : isConnected
+                    ? "type a message..."
+                    : "reconnecting..."
               }
               className="flex-1"
               aria-label="Message input"
               disabled={!isConnected}
+              autoFocus={!!editMessage}
             />
             <Button
               type="submit"
