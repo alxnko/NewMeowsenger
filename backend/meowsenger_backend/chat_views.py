@@ -353,8 +353,29 @@ def create_group(request):
 
     chat = Chat.objects.create(name=data.get("name"), is_group=True)
 
+    # Add the creator as user and admin
     chat.users.add(user)
     chat.admins.add(user)
+
+    # Add members if provided
+    if "members" in data and data.get("members"):
+        members = data.get("members")
+        for username in members:
+            try:
+                member = User.objects.get(username=username)
+                if member != user:  # Don't add the creator twice
+                    chat.users.add(member)
+
+                    # Create a system message to notify that user was added
+                    Message.objects.create(
+                        text=f"{member.username} was added to the group by {user.username}",
+                        user=user,
+                        chat=chat,
+                        is_system=True,
+                    )
+            except User.DoesNotExist:
+                # Skip users that don't exist
+                continue
 
     return Response({"status": True, "id": chat.id, "secret": chat.secret})
 

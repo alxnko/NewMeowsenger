@@ -1,6 +1,6 @@
 import { ReactNode, memo } from "react";
 import Link from "next/link";
-import { useAuth } from "@/contexts/auth-context";
+import { IoMdArrowRoundBack } from "react-icons/io";
 import { useLanguage } from "@/contexts/language-context";
 import { ChatDetails, ChatMessage } from "@/contexts/chat-context";
 import Button from "@/components/elements/button";
@@ -70,15 +70,8 @@ const ChatWidget = ({
     <div className="flex flex-col h-full">
       <div className="fixed top-0 right-4 left-1 h-14 flex items-center justify-between border-b dark:border-neutral-800">
         <div className="flex items-center space-x-3">
-          <Button
-            as={Link}
-            href={backUrl}
-            variant="light"
-            size="sm"
-            isIconOnly
-            className="py-1"
-          >
-            ←
+          <Button as={Link} href={backUrl} variant="light" isIconOnly>
+            <IoMdArrowRoundBack />
           </Button>
           <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center text-success font-medium">
             {chat.name[0].toLowerCase()}

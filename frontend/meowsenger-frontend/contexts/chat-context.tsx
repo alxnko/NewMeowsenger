@@ -11,6 +11,7 @@ import { useAuth } from "./auth-context";
 import { chatApi, GroupResponse } from "@/utils/api-client";
 import websocketService, { WebSocketMessage } from "@/utils/websocket-service";
 import { useToast } from "./toast-context";
+import { useRouter } from "next/navigation"; // Import router for redirection
 
 // Chat types
 export interface ChatMessage {
@@ -74,7 +75,10 @@ interface ChatContextType {
   typingUsers: { userId: number; username: string }[];
   fetchChats: () => Promise<void>;
   openChat: (chatId: string | number) => Promise<void>;
-  createGroup: (name: string) => Promise<GroupResponse | undefined>;
+  createGroup: (
+    name: string,
+    members?: string[]
+  ) => Promise<GroupResponse | undefined>;
   addMember: (username: string, message: string) => Promise<void>;
   removeMember: (username: string, message: string) => Promise<void>;
   leaveGroup: (message: string) => Promise<void>;
@@ -97,6 +101,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { token, user } = useAuth();
+  const router = useRouter(); // Add router for redirections
   const [chats, setChats] = useState<ChatBlock[]>([]);
   const [currentChat, setCurrentChat] = useState<ChatDetails | null>(null);
   const [currentMessages, setCurrentMessages] = useState<ChatMessage[]>([]);
@@ -138,7 +143,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (changed) {
         setRecentJoinEvents(newMap);
       }
-    }, 30000);
+    }, 5000);
 
     return () => clearInterval(cleanupInterval);
   }, [recentJoinEvents]);
@@ -147,6 +152,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (error) {
       showToast(error, "error");
+      // Clear the error after showing it as a toast
+      setTimeout(() => {
+        setError(null);
+      }, 100);
     }
   }, [error, showToast]);
 
@@ -212,7 +221,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Set up periodic polling as a fallback to WebSocket
     const interval = setInterval(() => {
       fetchChats();
-    }, 10000); // Check for new chats every 10 seconds
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [token]);
@@ -511,7 +520,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setError("Failed to open chat");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open chat");
+      console.error("Error opening chat:", err);
+
+      // Check if it's a 404 error (user not found)
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to open chat";
+      const is404 =
+        errorMessage.includes("404") ||
+        errorMessage.includes("User not found") ||
+        errorMessage.toLowerCase().includes("not exist");
+
+      if (is404 && typeof chatIdOrName === "string") {
+        // Create a user-friendly error message
+        const notFoundMessage = `User "${chatIdOrName}" doesn't exist.`;
+
+        // Show the error toast
+        showToast(notFoundMessage, "error");
+
+        // Redirect to /chats page
+        router.push("/chats");
+      } else {
+        // For other errors, just set the error state
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -596,7 +627,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
 
   const createGroup = async (
-    name: string
+    name: string,
+    members: string[] = []
   ): Promise<GroupResponse | undefined> => {
     if (!token) return;
 
@@ -604,7 +636,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await chatApi.createGroup(token, name);
+      const response = await chatApi.createGroup(token, name, members);
 
       if (response.status) {
         // Refresh the chat list after creating a group

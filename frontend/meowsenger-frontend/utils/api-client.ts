@@ -224,10 +224,14 @@ export const chatApi = {
       }
     ),
 
-  createGroup: (token: string, name: string): Promise<GroupResponse> =>
+  createGroup: (
+    token: string,
+    name: string,
+    members: string[]
+  ): Promise<GroupResponse> =>
     apiFetch<GroupResponse>("/api/c/create_group", {
       method: "POST",
-      body: { name },
+      body: { name, members },
       token,
     }),
 

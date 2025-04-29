@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Modal,
   ModalContent,
@@ -12,8 +12,8 @@ import { Button } from "@/components/elements/button";
 export interface CreateChatModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateChat: (username: string) => void;
-  onCreateGroupChat?: (name: string, usernames: string[]) => void;
+  onCreateChat: (username: string) => Promise<boolean>;
+  onCreateGroupChat?: (name: string, usernames: string[]) => Promise<boolean>;
 }
 
 export const CreateChatModal = ({
@@ -22,26 +22,64 @@ export const CreateChatModal = ({
   onCreateChat,
   onCreateGroupChat,
 }: CreateChatModalProps) => {
-  const [username, setUsername] = React.useState("");
-  const [isGroup, setIsGroup] = React.useState(false);
-  const [groupName, setGroupName] = React.useState("");
-  const [groupUsers, setGroupUsers] = React.useState("");
+  const [username, setUsername] = useState("");
+  const [isGroup, setIsGroup] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [currentUserInput, setCurrentUserInput] = useState("");
+  const [members, setMembers] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  const addMember = () => {
+    const trimmedUser = currentUserInput.trim();
+    if (!trimmedUser) {
+      return;
+    }
+
+    // Check if user already exists in the list
+    if (members.includes(trimmedUser)) {
+      setError(`${trimmedUser} is already added to the group`);
+      return;
+    }
+
+    setMembers([...members, trimmedUser]);
+    setCurrentUserInput("");
+    setError("");
+  };
+
+  const removeMember = (index: number) => {
+    const newMembers = [...members];
+    newMembers.splice(index, 1);
+    setMembers(newMembers);
+  };
 
   const handleSubmit = () => {
     if (isGroup && onCreateGroupChat) {
-      const users = groupUsers.split(",").map((user) => user.trim());
-      onCreateGroupChat(groupName, users);
+      if (members.length === 0) {
+        setError("Please add at least one member to the group");
+        return;
+      }
+
+      onCreateGroupChat(groupName, members);
     } else {
       onCreateChat(username);
     }
     resetForm();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addMember();
+    }
+  };
+
   const resetForm = () => {
     setUsername("");
     setIsGroup(false);
     setGroupName("");
-    setGroupUsers("");
+    setCurrentUserInput("");
+    setMembers([]);
+    setError("");
   };
 
   const handleClose = () => {
@@ -80,12 +118,51 @@ export const CreateChatModal = ({
                   onChange={(e) => setGroupName(e.target.value)}
                   placeholder="enter group name"
                 />
-                <Input
-                  label="group members"
-                  value={groupUsers}
-                  onChange={(e) => setGroupUsers(e.target.value)}
-                  placeholder="enter usernames separated by commas"
-                />
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm text-neutral-500 dark:text-neutral-400 lowercase">
+                    group members
+                  </label>
+
+                  <div className="flex flex-wrap gap-2">
+                    {members.map((member, index) => (
+                      <div
+                        key={index}
+                        className="px-2 py-1 bg-neutral-100 dark:bg-neutral-800 rounded-md flex items-center gap-2"
+                      >
+                        <span className="text-sm">{member}</span>
+                        <button
+                          onClick={() => removeMember(index)}
+                          className="text-neutral-500 hover:text-red-500"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Input
+                      value={currentUserInput}
+                      onChange={(e) => setCurrentUserInput(e.target.value)}
+                      placeholder="type a username and press enter or add"
+                      onKeyDown={handleKeyDown}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="flat"
+                      onPress={addMember}
+                      disabled={!currentUserInput.trim()}
+                      className="h-auto"
+                    >
+                      add
+                    </Button>
+                  </div>
+
+                  {error && (
+                    <p className="text-sm text-red-500 mt-1">{error}</p>
+                  )}
+                </div>
               </>
             ) : (
               <Input
@@ -103,7 +180,7 @@ export const CreateChatModal = ({
           </Button>
           <Button
             onPress={handleSubmit}
-            disabled={isGroup ? !groupName || !groupUsers : !username}
+            disabled={isGroup ? !groupName || members.length === 0 : !username}
           >
             create
           </Button>

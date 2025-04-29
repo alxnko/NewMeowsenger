@@ -202,7 +202,8 @@ export default function GroupChatPage() {
               onClick={() => setShowSettingsModal(true)}
               variant="light"
               size="sm"
-              className="ml-1 text-xs h-6 px-1"
+              isIconOnly
+              className="ml-1 text-xs h-6"
               title="Group Settings"
             >
               <FiSettings />

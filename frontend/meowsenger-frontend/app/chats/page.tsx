@@ -61,31 +61,31 @@ export default function ChatsPage() {
     setShowCreateChat(true);
   };
 
-  const handleDirectChatCreation = async (username: string) => {
+  const handleDirectChatCreation = async (
+    username: string
+  ): Promise<boolean> => {
     try {
       // Open a direct chat with the username
       await openChat(username);
-      setShowCreateChat(false);
       // Navigate to the chat page
       router.push(`/chats/user/${username}`);
+      return true;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create chat";
-      setToast({
-        show: true,
-        message,
-        type: "error",
-      });
+      // Return false to indicate failure, the error will be caught and displayed in the modal
+      console.error("Failed to create chat:", error);
+      return false;
     }
   };
 
-  const handleGroupChatCreation = async (name: string, usernames: string[]) => {
+  const handleGroupChatCreation = async (
+    name: string,
+    usernames: string[]
+  ): Promise<boolean> => {
     try {
-      // Create a group chat
-      const response = await createGroup(name);
+      // Create a group chat with the members
+      const response = await createGroup(name, usernames);
 
       if (response && response.id) {
-        setShowCreateChat(false);
         // Refresh the chat list
         await fetchChats();
         // Navigate to the group chat page
@@ -97,15 +97,13 @@ export default function ChatsPage() {
           message: "Group created successfully",
           type: "success",
         });
+        return true;
       }
+      return false;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create group";
-      setToast({
-        show: true,
-        message,
-        type: "error",
-      });
+      // Return false to indicate failure, the error will be caught and displayed in the modal
+      console.error("Failed to create group:", error);
+      return false;
     }
   };
 
@@ -142,12 +140,6 @@ export default function ChatsPage() {
             className="h-full"
           />
         </div>
-
-        {error && (
-          <div className="p-4 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
-            {error}
-          </div>
-        )}
 
         <CreateChatModal
           isOpen={showCreateChat}
