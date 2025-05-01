@@ -573,4 +573,73 @@ public class WebSocketService {
             log.error("Error sending user removal notification: {}", e.getMessage());
         }
     }
+    
+    /**
+     * Send a notification when chat settings are changed
+     */
+    @Transactional
+    public void notifyChatSettingsChanged(Long chatId, Long changedByUserId, String changedByUsername,
+                                         String name, String description, String message) {
+        try {
+            // Get chat details
+            Chat chat = chatRepository.findById(chatId).orElse(null);
+            
+            if (chat == null) {
+                log.error("Chat not found when notifying settings change");
+                return;
+            }
+            
+            // Create system message for the chat
+            WebSocketMessage systemMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT)
+                    .chatId(chatId)
+                    .userId(changedByUserId)
+                    .username(changedByUsername)
+                    .content(message)
+                    .timestamp(LocalDateTime.now())
+                    .isSystem(true)  // Mark as system message
+                    .isGroup(chat.isGroup())
+                    .chatName(name)  // Use the new name
+                    .build();
+                    
+            // Process and send this message to all members
+            processAndSendMessage(systemMessage);
+            
+            // Also send a special chat update notification to all members
+            WebSocketMessage updateMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                    .chatId(chatId)
+                    .userId(changedByUserId)
+                    .username(changedByUsername)
+                    .content(message)
+                    .timestamp(LocalDateTime.now())
+                    .updateType("SETTINGS_CHANGED")
+                    .isGroup(chat.isGroup())
+                    .chatName(name)
+                    .build();
+                    
+            // Get all users in the chat
+            Map<Long, String> chatUsers = userChatSessions.get(chatId);
+            if (chatUsers != null && !chatUsers.isEmpty()) {
+                for (Long userId : chatUsers.keySet()) {
+                    // Send to each user's queue
+                    messagingTemplate.convertAndSendToUser(
+                        userId.toString(),
+                        "/queue/chat-updates", 
+                        updateMessage
+                    );
+                    
+                    // Also send to user's topic as fallback
+                    messagingTemplate.convertAndSend(
+                        "/topic/user." + userId + ".chat-updates",
+                        updateMessage
+                    );
+                }
+                
+                log.info("Sent settings change notification to {} users for chat {}", chatUsers.size(), chatId);
+            }
+        } catch (Exception e) {
+            log.error("Error sending chat settings change notification: {}", e.getMessage());
+        }
+    }
 }

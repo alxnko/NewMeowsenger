@@ -651,6 +651,118 @@ class WebSocketService {
   }
 
   /**
+   * Send admin status change notification
+   * This should be called after a successful API call to add/remove admin
+   */
+  public sendAdminStatusChanged(
+    chatId: number,
+    targetUserId: number,
+    targetUsername: string,
+    isPromotion: boolean
+  ): void {
+    if (!this.client || !this.connected || !this.userId) {
+      console.warn(
+        "WebSocket not connected. Cannot send admin status notification."
+      );
+      return;
+    }
+
+    const message: WebSocketMessage = {
+      type: "CHAT_UPDATE",
+      userId: this.userId,
+      chatId: chatId,
+      content: isPromotion
+        ? `made ${targetUsername} an admin`
+        : `removed admin rights from ${targetUsername}`,
+      timestamp: new Date().toISOString(),
+      updateType: "ADMIN_CHANGED",
+      targetUserId: targetUserId,
+      targetUsername: targetUsername,
+      isPromotion: isPromotion,
+    };
+
+    // Send to the chat's admin channel
+    this.client.publish({
+      destination: "/app/chat.admin-changed",
+      body: JSON.stringify(message),
+    });
+
+    console.log("Sent admin status change notification:", message);
+  }
+
+  /**
+   * Send member removed notification
+   * This should be called after a successful API call to remove a member
+   */
+  public sendMemberRemoved(
+    chatId: number,
+    targetUserId: number,
+    targetUsername: string
+  ): void {
+    if (!this.client || !this.connected || !this.userId) {
+      console.warn(
+        "WebSocket not connected. Cannot send member removed notification."
+      );
+      return;
+    }
+
+    const message: WebSocketMessage = {
+      type: "CHAT_UPDATE",
+      userId: this.userId,
+      chatId: chatId,
+      content: `removed ${targetUsername} from the group`,
+      timestamp: new Date().toISOString(),
+      updateType: "MEMBER_REMOVED",
+      targetUserId: targetUserId,
+      targetUsername: targetUsername,
+    };
+
+    // Send to the chat's member channel
+    this.client.publish({
+      destination: "/app/chat.member-removed",
+      body: JSON.stringify(message),
+    });
+
+    console.log("Sent member removal notification:", message);
+  }
+
+  /**
+   * Send member added notification
+   * This should be called after a successful API call to add a member
+   */
+  public sendMemberAdded(
+    chatId: number,
+    targetUserId: number,
+    targetUsername: string
+  ): void {
+    if (!this.client || !this.connected || !this.userId) {
+      console.warn(
+        "WebSocket not connected. Cannot send member added notification."
+      );
+      return;
+    }
+
+    const message: WebSocketMessage = {
+      type: "CHAT_UPDATE",
+      userId: this.userId,
+      chatId: chatId,
+      content: `added ${targetUsername} to the group`,
+      timestamp: new Date().toISOString(),
+      updateType: "MEMBER_ADDED",
+      targetUserId: targetUserId,
+      targetUsername: targetUsername,
+    };
+
+    // Send to the chat's member channel
+    this.client.publish({
+      destination: "/app/chat.member-added",
+      body: JSON.stringify(message),
+    });
+
+    console.log("Sent member added notification:", message);
+  }
+
+  /**
    * Send a typing indicator notification
    */
   public sendTypingIndicator(chatId: number): void {

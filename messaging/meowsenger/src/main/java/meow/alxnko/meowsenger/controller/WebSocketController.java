@@ -183,6 +183,74 @@ public class WebSocketController {
     }
     
     /**
+     * Handle admin status change notifications
+     */
+    @MessageMapping("/chat.admin-changed")
+    public void adminStatusChanged(@Payload WebSocketMessage message) {
+        if (message.getChatId() == null || message.getUserId() == null || 
+            message.getTargetUserId() == null || message.getTargetUsername() == null) {
+            log.error("Invalid admin status change message: missing required fields");
+            return;
+        }
+        
+        log.info("Received admin status change message from WebSocket: {} -> {}, isPromotion: {}", 
+                message.getUserId(), message.getTargetUsername(), message.getIsPromotion());
+                
+        webSocketService.notifyAdminStatusChanged(
+            message.getChatId(),
+            message.getUserId(),
+            message.getUsername(), // sender's username
+            message.getTargetUserId(),
+            message.getTargetUsername(),
+            message.getIsPromotion() != null ? message.getIsPromotion() : false
+        );
+    }
+    
+    /**
+     * Handle member removed notifications
+     */
+    @MessageMapping("/chat.member-removed")
+    public void memberRemoved(@Payload WebSocketMessage message) {
+        if (message.getChatId() == null || message.getUserId() == null || 
+            message.getTargetUserId() == null || message.getTargetUsername() == null) {
+            log.error("Invalid member removal message: missing required fields");
+            return;
+        }
+        
+        log.info("Received member removal message from WebSocket: {} removed {}", 
+                message.getUserId(), message.getTargetUsername());
+                
+        webSocketService.notifyUserRemoved(
+            message.getChatId(),
+            message.getUserId(),
+            message.getUsername(), // sender's username
+            message.getTargetUserId(),
+            message.getTargetUsername()
+        );
+    }
+    
+    /**
+     * Handle member added notifications
+     */
+    @MessageMapping("/chat.member-added")
+    public void memberAdded(@Payload WebSocketMessage message) {
+        if (message.getChatId() == null || message.getUserId() == null || 
+            message.getTargetUsername() == null) {
+            log.error("Invalid member added message: missing required fields");
+            return;
+        }
+        
+        log.info("Received member added message from WebSocket: {} added {}", 
+                message.getUserId(), message.getTargetUsername());
+                
+        webSocketService.notifyChatMemberAdded(
+            message.getChatId(),
+            message.getUserId(),
+            message.getTargetUsername()
+        );
+    }
+    
+    /**
      * Create an error response
      */
     private WebSocketMessage createErrorResponse(String errorMessage) {

@@ -517,6 +517,25 @@ def add_member(request):
         chat.last_time = msg.send_time
         chat.save()
 
+        # Send WebSocket notification about user addition
+        try:
+            import requests
+
+            ws_url = "http://messaging:8081/api/user-added"
+            requests.post(
+                ws_url,
+                json={
+                    "chatId": chat.id,
+                    "addedByUserId": user.id,
+                    "addedByUsername": user.username,
+                    "targetUserId": target_user.id,
+                    "targetUsername": target_user.username,
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            print(f"Failed to send WebSocket notification: {e}")
+
         return Response({"status": True})
 
     return Response({"status": False})
@@ -734,6 +753,26 @@ def save_settings(request):
     # Update chat's last time
     chat.last_time = msg.send_time
     chat.save()
+
+    # Send WebSocket notification about settings change
+    try:
+        import requests
+
+        ws_url = "http://messaging:8081/api/chat-settings-changed"
+        requests.post(
+            ws_url,
+            json={
+                "chatId": chat.id,
+                "changedByUserId": user.id,
+                "changedByUsername": user.username,
+                "name": chat.name,
+                "description": chat.description,
+                "message": data.get("message"),
+            },
+            timeout=2,
+        )
+    except Exception as e:
+        print(f"Failed to send WebSocket notification: {e}")
 
     return Response({"status": True})
 

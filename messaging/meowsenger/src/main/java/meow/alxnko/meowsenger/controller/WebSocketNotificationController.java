@@ -89,4 +89,64 @@ public class WebSocketNotificationController {
             return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
         }
     }
+    
+    /**
+     * Endpoint to notify about user addition to a chat
+     */
+    @PostMapping("/user-added")
+    public ResponseEntity<Map<String, String>> userAdded(@RequestBody Map<String, Object> payload) {
+        try {
+            Long chatId = ((Number) payload.get("chatId")).longValue();
+            Long addedByUserId = ((Number) payload.get("addedByUserId")).longValue();
+            String targetUsername = (String) payload.get("targetUsername");
+            
+            log.info("User addition notification received: user {} added to chat {}", 
+                    targetUsername, chatId);
+            
+            // Call the WebSocket service to broadcast the notification
+            webSocketService.notifyChatMemberAdded(
+                chatId, 
+                addedByUserId, 
+                targetUsername
+            );
+            
+            return ResponseEntity.ok(Map.of("status", "success"));
+        } catch (Exception e) {
+            log.error("Error processing user addition notification: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
+    
+    /**
+     * Endpoint to notify about chat settings changes
+     */
+    @PostMapping("/chat-settings-changed")
+    public ResponseEntity<Map<String, String>> chatSettingsChanged(@RequestBody Map<String, Object> payload) {
+        try {
+            Long chatId = ((Number) payload.get("chatId")).longValue();
+            Long changedByUserId = ((Number) payload.get("changedByUserId")).longValue();
+            String changedByUsername = (String) payload.get("changedByUsername");
+            String name = (String) payload.get("name");
+            String description = (String) payload.get("description");
+            String message = (String) payload.get("message");
+            
+            log.info("Chat settings change notification received: chat {} updated by {}", 
+                    chatId, changedByUsername);
+            
+            // Call the WebSocket service to broadcast the notification
+            webSocketService.notifyChatSettingsChanged(
+                chatId, 
+                changedByUserId, 
+                changedByUsername,
+                name,
+                description,
+                message
+            );
+            
+            return ResponseEntity.ok(Map.of("status", "success"));
+        } catch (Exception e) {
+            log.error("Error processing chat settings change notification: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
 }

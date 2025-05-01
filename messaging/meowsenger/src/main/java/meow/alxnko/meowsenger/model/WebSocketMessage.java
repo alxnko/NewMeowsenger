@@ -39,6 +39,11 @@ public class WebSocketMessage {
     // For chat updates
     private String updateType;      // Type of update (NEW_CHAT, MEMBER_ADDED, etc.)
     
+    // Admin status change fields
+    private Long targetUserId;      // ID of the target user (for admin changes, user removal, etc.)
+    private String targetUsername;  // Username of the target user
+    private Boolean isPromotion;    // Whether the user was promoted or demoted (for admin changes)
+    
     public enum MessageType {
         CHAT,       // Regular chat message
         JOIN,       // User joining a chat

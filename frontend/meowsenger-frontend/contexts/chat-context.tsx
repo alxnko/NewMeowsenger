@@ -263,48 +263,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // If the user's admin status changed in the current chat, refresh the chat details
         if (currentChat && message.chatId === currentChat.id) {
           // Check if this is about the current user
-          const isAboutCurrentUser = message.content && (
-            message.content.includes(`removed admin rights from ${user?.username}`) ||
-            message.content.includes(`made ${user?.username} an admin`)
-          );
-          
+          const isAboutCurrentUser =
+            message.content &&
+            (message.content.includes(
+              `removed admin rights from ${user?.username}`
+            ) ||
+              message.content.includes(`made ${user?.username} an admin`));
+
           if (isAboutCurrentUser) {
             console.log("Admin status changed for current user");
-            
+
             // Immediately update the current chat object to reflect admin status change
-            if (message.content.includes(`removed admin rights from ${user?.username}`)) {
+            if (
+              message.content.includes(
+                `removed admin rights from ${user?.username}`
+              )
+            ) {
               // If user lost admin rights, immediately update the UI by modifying the admins array
-              setCurrentChat(prevChat => {
+              setCurrentChat((prevChat) => {
                 if (!prevChat) return null;
-                
+
                 // Remove current user from admins array
-                const newAdmins = prevChat.admins.filter(admin => admin !== user.username);
-                
+                const newAdmins = prevChat.admins.filter(
+                  (admin) => admin !== user.username
+                );
+
                 return {
                   ...prevChat,
-                  admins: newAdmins
+                  admins: newAdmins,
                 };
               });
-              
+
               // Then fully refresh the chat details
               openChat(currentChat.id);
               // Show notification to the user
               showToast("You are no longer an admin in this group", "info");
-            } else if (message.content.includes(`made ${user?.username} an admin`)) {
+            } else if (
+              message.content.includes(`made ${user?.username} an admin`)
+            ) {
               // If user gained admin rights, immediately update the UI by modifying the admins array
-              setCurrentChat(prevChat => {
+              setCurrentChat((prevChat) => {
                 if (!prevChat) return null;
-                
+
                 // Add current user to admins array if not already there
                 if (!prevChat.admins.includes(user.username)) {
                   return {
                     ...prevChat,
-                    admins: [...prevChat.admins, user.username]
+                    admins: [...prevChat.admins, user.username],
                   };
                 }
                 return prevChat;
               });
-              
+
               // Then fully refresh the chat details
               openChat(currentChat.id);
               // Show notification to the user
@@ -480,13 +490,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           // Admin status has changed - refresh the chat to update UI
           if (currentChat && message.chatId === currentChat.id) {
             // Check if this is about the current user
-            if (message.content && message.content.includes(`removed admin rights from ${user?.username}`)) {
+            if (
+              message.content &&
+              message.content.includes(
+                `removed admin rights from ${user?.username}`
+              )
+            ) {
               console.log("Current user lost admin rights");
               // Force refresh the chat details immediately
               openChat(currentChat.id);
               // Show notification to the user
               showToast("You are no longer an admin in this group", "info");
-            } else if (message.content && message.content.includes(`made ${user?.username} an admin`)) {
+            } else if (
+              message.content &&
+              message.content.includes(`made ${user?.username} an admin`)
+            ) {
               console.log("Current user became an admin");
               // Force refresh the chat details
               openChat(currentChat.id);
@@ -805,6 +823,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (response.status) {
         // Refresh current chat after adding a member
         await openChat(currentChat.id);
+
+        // Notify via WebSocket if connected
+        if (wsConnected && user) {
+          // We can't get the target user's ID immediately since they were just added
+          // and might not be in our local user list yet, so we'll use a placeholder ID of 0
+          // The backend will resolve the actual user ID from the username
+          websocketService.sendMemberAdded(
+            currentChat.id,
+            0, // Placeholder ID, backend will resolve from username
+            username
+          );
+        }
       } else {
         setError("Failed to add member");
       }
@@ -832,6 +862,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (response.status) {
         // Refresh current chat after removing a member
         await openChat(currentChat.id);
+
+        // Notify via WebSocket if connected
+        if (wsConnected && user) {
+          // Find the target user to get their ID
+          const targetUser = currentChat.users?.find(
+            (u) => u.username === username
+          );
+          if (targetUser) {
+            websocketService.sendMemberRemoved(
+              currentChat.id,
+              targetUser.id,
+              username
+            );
+          }
+        }
       } else {
         setError("Failed to remove member");
       }
@@ -887,6 +932,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (response.status) {
         // Refresh current chat after adding an admin
         await openChat(currentChat.id);
+
+        // Notify via WebSocket if connected
+        if (wsConnected && user) {
+          // Find the target user to get their ID
+          const targetUser = currentChat.users?.find(
+            (u) => u.username === username
+          );
+          if (targetUser) {
+            websocketService.sendAdminStatusChanged(
+              currentChat.id,
+              targetUser.id,
+              username,
+              true // isPromotion = true for adding admin
+            );
+          }
+        }
       } else {
         setError("Failed to make user an admin");
       }
@@ -916,6 +977,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (response.status) {
         // Refresh current chat after removing admin status
         await openChat(currentChat.id);
+
+        // Notify via WebSocket if connected
+        if (wsConnected && user) {
+          // Find the target user to get their ID
+          const targetUser = currentChat.users?.find(
+            (u) => u.username === username
+          );
+          if (targetUser) {
+            websocketService.sendAdminStatusChanged(
+              currentChat.id,
+              targetUser.id,
+              username,
+              false // isPromotion = false for removing admin
+            );
+          }
+        }
       } else {
         setError("Failed to remove admin status");
       }
