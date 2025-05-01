@@ -15,6 +15,7 @@ import meow.alxnko.meowsenger.model.Message;
 import meow.alxnko.meowsenger.model.User;
 import meow.alxnko.meowsenger.model.WebSocketMessage;
 import meow.alxnko.meowsenger.repository.ChatRepository;
+import meow.alxnko.meowsenger.repository.MessageRepository;
 import meow.alxnko.meowsenger.repository.UserRepository;
 
 import java.time.LocalDateTime;
@@ -33,6 +34,7 @@ public class WebSocketService {
     private final ChatRepository chatRepository;
     private final UserRepository userRepository;
     private final MessageService messageService;
+    private final MessageRepository messageRepository;
     private final UserChannelInterceptor userChannelInterceptor;
     
     // Map to track active user sessions
@@ -301,7 +303,18 @@ public class WebSocketService {
         log.debug("Chat {} has {} users", chatId, chatUsers.size());
         
         // Send the message to each user in the chat INCLUDING the sender
-        for (Long userId : chatUsers.keySet()) {
+        for (Long userId : new HashMap<>(chatUsers).keySet()) { // Create a copy to avoid concurrent modification
+            // Double-check that user is still a member of the chat before sending messages
+            // This helps prevent sending messages to users who were removed but still in the userChatSessions map
+            if (!chatRepository.isUserInChat(chatId, userId)) {
+                // User is no longer a member of this chat, remove them from the session
+                String removedSessionId = chatUsers.remove(userId);
+                if (removedSessionId != null) {
+                    log.info("Removed user {} from chat {} active sessions (not a member anymore)", userId, chatId);
+                }
+                continue; // Skip sending message to this user
+            }
+            
             log.debug("Sending message to user {} for chat {}", userId, chatId);
             
             try {
@@ -350,96 +363,361 @@ public class WebSocketService {
     }
     
     /**
-     * Send a notification when a user is added to a chat
+     * Broadcast a message to all users in a chat
+     */
+    public void broadcastToChat(Long chatId, WebSocketMessage message) {
+        if (chatId == null) {
+            log.error("Cannot broadcast message: No chat ID provided");
+            return;
+        }
+        
+        // Send the message to all users in the chat including the sender
+        sendMessageToAllUsers(chatId, message.getUserId(), message);
+        
+        // For important updates like member removal, also try sending to all active sessions
+        // who may not be actively subscribed to the chat but need to know about the update
+        if (message.getType() == WebSocketMessage.MessageType.CHAT_UPDATE && 
+            "MEMBER_REMOVED".equals(message.getUpdateType())) {
+            
+            log.info("Broadcasting member removal update to all active users who are in chat {}", chatId);
+            
+            // Get all active user sessions
+            for (Long userId : sessionUserMap.values()) {
+                // Skip duplicates and the removed user
+                if (userId == null || 
+                    (message.getTargetUserId() != null && userId.equals(message.getTargetUserId()))) {
+                    continue;
+                }
+                
+                // Only send to users who are still members of the chat
+                if (chatRepository.isUserInChat(chatId, userId)) {
+                    try {
+                        // Send update notification to this user
+                        messagingTemplate.convertAndSendToUser(
+                            userId.toString(),
+                            "/queue/chat-updates", 
+                            message
+                        );
+                        
+                        // Also use topic as fallback
+                        messagingTemplate.convertAndSend(
+                            "/topic/user." + userId + ".chat-updates",
+                            message
+                        );
+                        
+                        log.debug("Sent member removal update to user {}", userId);
+                    } catch (Exception e) {
+                        log.error("Error sending removal update to user {}: {}", userId, e.getMessage());
+                    }
+                }
+            }
+        }
+        
+        log.info("Message broadcast to chat {}", chatId);
+    }
+    
+    /**
+     * Notify all chat members when a new member is added
+     */
+    public void notifyChatMemberAdded(Long chatId, Long addedByUserId, String addedUsername) {
+        // Verify chat exists
+        Chat chat = chatRepository.findById(chatId).orElse(null);
+        if (chat == null) {
+            log.error("Chat not found for memberAdded notification: {}", chatId);
+            return;
+        }
+        
+        // Get the user who added the member
+        User addedBy = userRepository.findById(addedByUserId).orElse(null);
+        if (addedBy == null) {
+            log.error("User not found for memberAdded notification: {}", addedByUserId);
+            return;
+        }
+        
+        // Find the target user
+        User targetUser = userRepository.findByUsername(addedUsername).orElse(null);
+        if (targetUser == null) {
+            log.error("Target user not found for memberAdded notification: {}", addedUsername);
+            return;
+        }
+        
+        // Create notification message
+        String content = addedBy.getUsername() + " added " + addedUsername + " to the group";
+        
+        // Create update message for the UI
+        WebSocketMessage updateMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                .updateType("MEMBER_ADDED")
+                .chatId(chatId)
+                .userId(addedByUserId)
+                .username(addedBy.getUsername())
+                .content(content)
+                .timestamp(LocalDateTime.now())
+                .targetUserId(targetUser.getId())
+                .targetUsername(addedUsername)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+                
+        // Send notification to all members of the chat
+        broadcastToChat(chatId, updateMessage);
+                
+        // Send a special notification to the added user
+        WebSocketMessage newChatMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                .updateType("NEW_CHAT")
+                .chatId(chatId)
+                .userId(addedByUserId)
+                .username(addedBy.getUsername())
+                .content("You were added to " + chat.getName())
+                .timestamp(LocalDateTime.now())
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+                
+        // Send to the specific target user's personal channel
+        messagingTemplate.convertAndSendToUser(
+            targetUser.getId().toString(),
+            "/queue/chat-updates",
+            newChatMessage
+        );
+    }
+    
+    /**
+     * Notify all chat members and the removed user when someone is removed
      */
     @Transactional
-    public void notifyChatMemberAdded(Long chatId, Long userId, String addedUsername) {
+    public void notifyUserRemoved(Long chatId, Long removedByUserId, String removedByUsername, 
+                                 Long targetUserId, String targetUsername) {
+        log.info("Sending user removal notification: {} removed {} from {}", 
+                removedByUsername, targetUsername, chatId);
+        
+        // Verify chat exists
+        Chat chat = chatRepository.findById(chatId).orElse(null);
+        if (chat == null) {
+            log.error("Chat not found for user removal notification: {}", chatId);
+            return;
+        }
+        
+        // Get the user who removed the member
+        User removedBy = userRepository.findById(removedByUserId).orElse(null);
+        if (removedBy == null) {
+            log.error("User not found for user removal notification: {}", removedByUserId);
+            return;
+        }
+        
+        // Find the target user
+        User targetUser = userRepository.findById(targetUserId).orElse(null);
+        if (targetUser == null) {
+            log.error("Target user not found for user removal notification: {}", targetUserId);
+            return;
+        }
+        
+        // Create system message content
+        String content = removedByUsername + " removed " + targetUsername + " from the group";
+        
+        // Create and save system message
+        Message systemMessage = new Message();
+        systemMessage.setChat(chat);
+        systemMessage.setUser(removedBy);
+        systemMessage.setText(content);
+        systemMessage.setSystem(true);
+        systemMessage.setSendTime(LocalDateTime.now());
+        Message savedMessage = messageRepository.save(systemMessage);
+        
+        log.info("Created system message for user removal: {}", savedMessage.getId());
+        
+        // First, create and send a regular chat message
+        WebSocketMessage chatMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT)
+                .chatId(chatId)
+                .userId(removedByUserId)
+                .username(removedByUsername)
+                .content(content)
+                .timestamp(savedMessage.getSendTime())
+                .messageId(savedMessage.getId())
+                .isSystem(true)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+                
+        // Send the chat message to all current members
+        broadcastToChat(chatId, chatMessage);
+        
+        // Second, create a special update notification for UI updates
+        WebSocketMessage updateMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                .updateType("MEMBER_REMOVED")
+                .chatId(chatId)
+                .userId(removedByUserId)
+                .username(removedByUsername)
+                .content(content)
+                .timestamp(LocalDateTime.now())
+                .targetUserId(targetUserId)
+                .targetUsername(targetUsername)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+                
+        // Send the update to all members (including the one being removed)
+        broadcastToChat(chatId, updateMessage);
+        
+        // Third, send a special notification to the removed user's personal channel
+        // This ensures they're notified even if offline when the broadcast happened
+        WebSocketMessage personalMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                .updateType("MEMBER_REMOVED")
+                .chatId(chatId)
+                .userId(removedByUserId) 
+                .username(removedByUsername)
+                .content("You were removed from " + chat.getName())
+                .timestamp(LocalDateTime.now())
+                .targetUserId(targetUserId)
+                .targetUsername(targetUsername)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+                
+        // Send to the specific target user's personal channel
+        messagingTemplate.convertAndSendToUser(
+            targetUserId.toString(),
+            "/queue/chat-updates",
+            personalMessage
+        );
+        
+        // Actually remove the user from the chat in the database
+        chatRepository.removeUserFromChat(chatId, targetUserId);
+        
+        log.info("Successfully sent all user removal notifications and removed user from chat");
+        
+        // First, send a special direct removal notification to the removed user 
+        // with clear instructions to redirect to home
         try {
-            // Get chat details
-            Chat chat = chatRepository.findById(chatId).orElse(null);
-            User user = userRepository.findById(userId).orElse(null);
+            messagingTemplate.convertAndSendToUser(
+                targetUserId.toString(),
+                "/queue/chat-updates", 
+                updateMessage
+            );
             
-            if (chat == null || user == null) {
-                log.error("Chat or user not found when notifying chat member added");
-                return;
+            // Send to topic as well for redundancy
+            messagingTemplate.convertAndSend(
+                "/topic/user." + targetUserId + ".chat-updates",
+                updateMessage
+            );
+            
+            log.info("Sent direct removal notification to user {}", targetUserId);
+            
+            // Now broadcast message to remaining chat members
+            for (Long userId : sessionUserMap.values()) {
+                // Skip duplicates and the removed user
+                if (userId == null || userId.equals(targetUserId)) {
+                    continue;
+                }
+                
+                // Only send to actual chat members
+                if (chatRepository.isUserInChat(chatId, userId)) {
+                    try {
+                        // Send both message types to ensure delivery
+                        messagingTemplate.convertAndSendToUser(
+                            userId.toString(),
+                            "/queue/chat." + chatId, 
+                            chatMessage
+                        );
+                        
+                        messagingTemplate.convertAndSendToUser(
+                            userId.toString(),
+                            "/queue/chat-updates", 
+                            updateMessage
+                        );
+                        
+                        log.debug("Sent removal notifications to user {}", userId);
+                    } catch (Exception e) {
+                        log.error("Error sending removal notifications to user {}: {}", userId, e.getMessage());
+                    }
+                }
             }
             
-            // Create the notification message
-            WebSocketMessage chatUpdateMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
-                    .chatId(chatId)
-                    .userId(userId)
-                    .username(user.getUsername())
-                    .content(addedUsername + " was added to " + chat.getName())
-                    .timestamp(LocalDateTime.now())
-                    .isGroup(chat.isGroup())
-                    .chatName(chat.getName())
-                    .updateType("MEMBER_ADDED")
-                    .build();
+            // Actually remove the user from the chat in the database
+            chatRepository.removeUserFromChat(chatId, targetUserId);
             
-            // Send notification to the user who was added
-            User addedUser = userRepository.findByUsername(addedUsername).orElse(null);
-            if (addedUser != null) {
-                messagingTemplate.convertAndSendToUser(
-                    addedUser.getId().toString(),
-                    "/queue/chat-updates", 
-                    chatUpdateMessage
-                );
-                
-                // Also send to user's topic as fallback
-                messagingTemplate.convertAndSend(
-                    "/topic/user." + addedUser.getId() + ".chat-updates",
-                    chatUpdateMessage
-                );
-                
-                log.info("Sent chat update notification to user {} for chat {}", addedUser.getId(), chatId);
-            }
+            log.info("Successfully removed user {} from chat {}", targetUserId, chatId);
         } catch (Exception e) {
-            log.error("Error sending chat member added notification: {}", e.getMessage());
+            log.error("Error processing user removal: {}", e.getMessage());
         }
     }
     
     /**
-     * Send a notification when a new chat is created
+     * Send notification about chat settings changes to all members
      */
     @Transactional
-    public void notifyNewChatCreated(Chat chat, User creator, List<User> members) {
+    public void notifyChatSettingsChanged(Long chatId, Long changedByUserId, String changedByUsername, 
+                                         String newChatName, String description, String updateMessage) {
         try {
-            for (User member : members) {
-                // Skip the creator (they'll know they created it)
-                if (member.getId().equals(creator.getId())) {
-                    continue;
-                }
-                
-                WebSocketMessage newChatMessage = WebSocketMessage.builder()
-                        .type(WebSocketMessage.MessageType.CHAT_UPDATE)
-                        .chatId(chat.getId())
-                        .userId(creator.getId())
-                        .username(creator.getUsername())
-                        .content("You were added to " + chat.getName())
-                        .timestamp(LocalDateTime.now())
-                        .isGroup(chat.isGroup())
-                        .chatName(chat.getName())
-                        .updateType("NEW_CHAT")
-                        .build();
-                
-                // Send to user's queue
-                messagingTemplate.convertAndSendToUser(
-                    member.getId().toString(),
-                    "/queue/chat-updates", 
-                    newChatMessage
-                );
-                
-                // Also send to user's topic as fallback
-                messagingTemplate.convertAndSend(
-                    "/topic/user." + member.getId() + ".chat-updates",
-                    newChatMessage
-                );
-                
-                log.info("Sent new chat notification to user {} for chat {}", member.getId(), chat.getId());
+            // Get chat details
+            Chat chat = chatRepository.findById(chatId).orElse(null);
+            if (chat == null) {
+                log.error("Chat not found when notifying about settings change");
+                return;
             }
+            
+            // Get user who made the change
+            User changedByUser = userRepository.findById(changedByUserId).orElse(null);
+            if (changedByUser == null) {
+                log.error("User {} not found when notifying about settings change", changedByUserId);
+                return;
+            }
+            
+            // Use provided username or fallback to the user's actual username
+            String username = changedByUsername != null ? changedByUsername : changedByUser.getUsername();
+            
+            // Create update message with all the settings data
+            WebSocketMessage settingsUpdateMessage = WebSocketMessage.builder()
+                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
+                    .updateType("SETTINGS_CHANGED")
+                    .chatId(chatId)
+                    .userId(changedByUserId)
+                    .username(username)
+                    .content(description) // Use content for description
+                    .timestamp(LocalDateTime.now())
+                    .isGroup(chat.isGroup())
+                    .chatName(newChatName) // Use the new chat name
+                    .updateMessage(updateMessage) // Message about what changed
+                    .build();
+            
+            // Broadcast to all chat members
+            broadcastToChat(chatId, settingsUpdateMessage);
+            
+            log.info("Sent chat settings change notification for chat {}: {}", chatId, updateMessage);
         } catch (Exception e) {
-            log.error("Error sending new chat notification: {}", e.getMessage());
+            log.error("Error sending chat settings change notification: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send notification about chat settings changes to all members
+     * (Overloaded method for backward compatibility)
+     */
+    @Transactional
+    public void notifyChatSettingsChanged(Long chatId, Long changedByUserId, String updateMessage) {
+        try {
+            // Get user who made the change
+            User changedByUser = userRepository.findById(changedByUserId).orElse(null);
+            if (changedByUser == null) {
+                log.error("User {} not found when notifying about settings change", changedByUserId);
+                return;
+            }
+            
+            // Call the full method with default values
+            notifyChatSettingsChanged(
+                chatId, 
+                changedByUserId, 
+                changedByUser.getUsername(),
+                null, // No new chat name
+                updateMessage, // Use update message as description
+                updateMessage  // And as update message
+            );
+        } catch (Exception e) {
+            log.error("Error sending chat settings change notification: {}", e.getMessage());
         }
     }
     
@@ -456,6 +734,15 @@ public class WebSocketService {
             if (chat == null) {
                 log.error("Chat not found when notifying admin status change");
                 return;
+            }
+            
+            // Get user who made the change
+            User changedByUser = userRepository.findById(changedByUserId).orElse(null);
+            if (changedByUser == null) {
+                log.error("User {} not found when notifying admin status change", changedByUserId);
+                changedByUsername = changedByUsername != null ? changedByUsername : "Unknown user";
+            } else if (changedByUsername == null) {
+                changedByUsername = changedByUser.getUsername();
             }
             
             // Create the notification message with system flag
@@ -475,171 +762,80 @@ public class WebSocketService {
                     .chatName(chat.getName())
                     .build();
                     
-            // Process and send this message to all members including the target user
-            processAndSendMessage(systemMessage);
+            // Save the system message directly
+            Message savedMessage = messageService.saveMessage(
+                content, 
+                changedByUserId, 
+                chatId, 
+                null
+            );
             
-            // Also send a special admin status update notification directly to the affected user
+            // Update the system message with the saved message ID
+            systemMessage.setMessageId(savedMessage.getId());
+                    
+            // First try sending to active subscribers
+            sendMessageToAllUsers(chatId, changedByUserId, systemMessage);
+            
+            // Build the CHAT_UPDATE notification for UI updates
             WebSocketMessage statusUpdateMessage = WebSocketMessage.builder()
                     .type(WebSocketMessage.MessageType.CHAT_UPDATE)
                     .chatId(chatId)
                     .userId(changedByUserId)
                     .username(changedByUsername)
-                    .content(content)
                     .timestamp(LocalDateTime.now())
                     .updateType("ADMIN_CHANGED")
                     .isGroup(chat.isGroup())
                     .chatName(chat.getName())
+                    .targetUserId(targetUserId)
+                    .targetUsername(targetUsername)
+                    .isPromotion(isPromotion)
+                    .content(content) // Include content for context
                     .build();
             
-            // Send to the target user's queue
-            messagingTemplate.convertAndSendToUser(
-                targetUserId.toString(),
-                "/queue/chat-updates", 
-                statusUpdateMessage
-            );
+            // Get all active user sessions (regardless of chat subscription)
+            for (Long userId : sessionUserMap.values()) {
+                // Skip duplicates
+                if (userId == null) continue;
+                
+                // Check if user is member of the chat
+                if (chatRepository.isUserInChat(chatId, userId)) {
+                    try {
+                        // Send both the system message and the update notification
+                        // System message (for the chat feed)
+                        messagingTemplate.convertAndSendToUser(
+                            userId.toString(),
+                            "/queue/chat." + chatId, 
+                            systemMessage
+                        );
+                        
+                        // Update notification (for UI updates)
+                        messagingTemplate.convertAndSendToUser(
+                            userId.toString(),
+                            "/queue/chat-updates", 
+                            statusUpdateMessage
+                        );
+                        
+                        // Also use broadcast topics as fallback
+                        messagingTemplate.convertAndSend(
+                            "/topic/user." + userId + ".chat." + chatId,
+                            systemMessage
+                        );
+                        
+                        messagingTemplate.convertAndSend(
+                            "/topic/user." + userId + ".chat-updates",
+                            statusUpdateMessage
+                        );
+                        
+                        log.debug("Sent admin change notifications to user {}", userId);
+                    } catch (Exception e) {
+                        log.error("Error sending admin notifications to user {}: {}", userId, e.getMessage());
+                    }
+                }
+            }
             
-            // Also send to target user's topic as fallback
-            messagingTemplate.convertAndSend(
-                "/topic/user." + targetUserId + ".chat-updates",
-                statusUpdateMessage
-            );
-            
-            log.info("Sent admin status change notification to user {} for chat {}", targetUserId, chatId);
+            log.info("Admin status change notifications sent for chat {}", chatId);
         } catch (Exception e) {
             log.error("Error sending admin status change notification: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Send a notification when a user is removed from a chat
-     */
-    @Transactional
-    public void notifyUserRemoved(Long chatId, Long removedByUserId, String removedByUsername, 
-                                 Long targetUserId, String targetUsername) {
-        try {
-            // Get chat details
-            Chat chat = chatRepository.findById(chatId).orElse(null);
-            
-            if (chat == null) {
-                log.error("Chat not found when notifying user removal");
-                return;
-            }
-            
-            // Create system message for the chat
-            String content = removedByUsername + " removed " + targetUsername + " from the group";
-            WebSocketMessage systemMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT)
-                    .chatId(chatId)
-                    .userId(removedByUserId)
-                    .username(removedByUsername)
-                    .content(content)
-                    .timestamp(LocalDateTime.now())
-                    .isSystem(true)  // Mark as system message
-                    .isGroup(chat.isGroup())
-                    .chatName(chat.getName())
-                    .build();
-                    
-            // Process and send this message to all remaining members
-            processAndSendMessage(systemMessage);
-            
-            // Send a special removal notification to the removed user
-            WebSocketMessage removalMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
-                    .chatId(chatId)
-                    .userId(removedByUserId)
-                    .username(removedByUsername)
-                    .content(content)
-                    .timestamp(LocalDateTime.now())
-                    .updateType("MEMBER_REMOVED")
-                    .isGroup(chat.isGroup())
-                    .chatName(chat.getName())
-                    .build();
-            
-            // Send to the removed user's queue
-            messagingTemplate.convertAndSendToUser(
-                targetUserId.toString(),
-                "/queue/chat-updates", 
-                removalMessage
-            );
-            
-            // Also send to removed user's topic as fallback
-            messagingTemplate.convertAndSend(
-                "/topic/user." + targetUserId + ".chat-updates",
-                removalMessage
-            );
-            
-            log.info("Sent removal notification to user {} for chat {}", targetUserId, chatId);
-        } catch (Exception e) {
-            log.error("Error sending user removal notification: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Send a notification when chat settings are changed
-     */
-    @Transactional
-    public void notifyChatSettingsChanged(Long chatId, Long changedByUserId, String changedByUsername,
-                                         String name, String description, String message) {
-        try {
-            // Get chat details
-            Chat chat = chatRepository.findById(chatId).orElse(null);
-            
-            if (chat == null) {
-                log.error("Chat not found when notifying settings change");
-                return;
-            }
-            
-            // Create system message for the chat
-            WebSocketMessage systemMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT)
-                    .chatId(chatId)
-                    .userId(changedByUserId)
-                    .username(changedByUsername)
-                    .content(message)
-                    .timestamp(LocalDateTime.now())
-                    .isSystem(true)  // Mark as system message
-                    .isGroup(chat.isGroup())
-                    .chatName(name)  // Use the new name
-                    .build();
-                    
-            // Process and send this message to all members
-            processAndSendMessage(systemMessage);
-            
-            // Also send a special chat update notification to all members
-            WebSocketMessage updateMessage = WebSocketMessage.builder()
-                    .type(WebSocketMessage.MessageType.CHAT_UPDATE)
-                    .chatId(chatId)
-                    .userId(changedByUserId)
-                    .username(changedByUsername)
-                    .content(message)
-                    .timestamp(LocalDateTime.now())
-                    .updateType("SETTINGS_CHANGED")
-                    .isGroup(chat.isGroup())
-                    .chatName(name)
-                    .build();
-                    
-            // Get all users in the chat
-            Map<Long, String> chatUsers = userChatSessions.get(chatId);
-            if (chatUsers != null && !chatUsers.isEmpty()) {
-                for (Long userId : chatUsers.keySet()) {
-                    // Send to each user's queue
-                    messagingTemplate.convertAndSendToUser(
-                        userId.toString(),
-                        "/queue/chat-updates", 
-                        updateMessage
-                    );
-                    
-                    // Also send to user's topic as fallback
-                    messagingTemplate.convertAndSend(
-                        "/topic/user." + userId + ".chat-updates",
-                        updateMessage
-                    );
-                }
-                
-                log.info("Sent settings change notification to {} users for chat {}", chatUsers.size(), chatId);
-            }
-        } catch (Exception e) {
-            log.error("Error sending chat settings change notification: {}", e.getMessage());
         }
     }
 }

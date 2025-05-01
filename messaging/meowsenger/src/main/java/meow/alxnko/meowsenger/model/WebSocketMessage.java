@@ -38,6 +38,7 @@ public class WebSocketMessage {
     
     // For chat updates
     private String updateType;      // Type of update (NEW_CHAT, MEMBER_ADDED, etc.)
+    private String updateMessage;   // Human-readable message about the change for system messages
     
     // Admin status change fields
     private Long targetUserId;      // ID of the target user (for admin changes, user removal, etc.)

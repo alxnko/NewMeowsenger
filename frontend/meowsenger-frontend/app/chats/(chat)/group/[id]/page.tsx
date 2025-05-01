@@ -143,9 +143,11 @@ export default function GroupChatPage() {
     setSettingsLoading(true);
     try {
       if (userActionType === "add" && newUsername) {
+        // Fix: pass the correct parameters - chatId, userId, username
         await addMember(
-          newUsername,
-          `${user.username} added ${newUsername} to the group`
+          currentChat.id,
+          0, // Using 0 as a placeholder userId which the backend will resolve from username
+          newUsername
         );
       } else if (userActionType === "remove" && selectedUser) {
         await removeMember(

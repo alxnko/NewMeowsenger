@@ -26,6 +26,7 @@ export interface ChatMessage {
   isForwarded: boolean;
   isPending?: boolean; // Added for messages in sending state
   isRead?: boolean; // Added for tracking read status
+  messageKey?: string; // Added for deduplication
 }
 
 export interface LastMessage {
@@ -55,6 +56,8 @@ export interface ChatUser {
   is_verified?: boolean;
   is_tester?: boolean;
   is_admin?: boolean;
+  // Supporting both naming conventions for compatibility during transition
+  // In the future, we should standardize on one naming convention
 }
 
 export interface ChatDetails extends ChatBlock {
@@ -79,7 +82,11 @@ interface ChatContextType {
     name: string,
     members?: string[]
   ) => Promise<GroupResponse | undefined>;
-  addMember: (username: string, message: string) => Promise<void>;
+  addMember: (
+    chatId: number,
+    userId: number,
+    username: string
+  ) => Promise<boolean>;
   removeMember: (username: string, message: string) => Promise<void>;
   addAdmin: (username: string, message: string) => Promise<void>;
   removeAdmin: (username: string, message: string) => Promise<void>;
@@ -160,6 +167,274 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }, 100);
     }
   }, [error, showToast]);
+
+  // Set up WebSocket listeners for admin status changes, user removals, and member additions in one place
+  useEffect(() => {
+    if (!token || !user || !user.id || !wsConnected) return;
+
+    console.log("Setting up unified WebSocket listeners for user events");
+
+    // Subscribe to admin status changes
+    const adminStatusChangeSub = websocketService.subscribeToAdminStatusChanges(
+      user.id,
+      handleAdminStatusChange
+    );
+
+    // Subscribe to user removals
+    const userRemovalSub = websocketService.subscribeToUserRemovals(
+      user.id,
+      handleMemberRemoved
+    );
+
+    // Subscribe to member additions
+    const memberAdditionSub = websocketService.subscribeToMemberAdditions(
+      user.id,
+      handleMemberAdded
+    );
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      console.log("Cleaning up WebSocket subscriptions");
+      // No need to explicitly unsubscribe as the WebSocket service handles this internally
+    };
+  }, [token, user, wsConnected]);
+
+  // Handle admin status change notification from WebSocket
+  const handleAdminStatusChange = useCallback(
+    (message: WebSocketMessage) => {
+      console.log("Received admin status change:", message);
+
+      if (!currentChat) return;
+
+      // If this is about the current chat
+      if (message.chatId === currentChat.id) {
+        // Update the user list to reflect the new admin status
+        setCurrentChat((prev) => {
+          if (!prev) return null;
+
+          const updatedUsers = prev.users.map((u) => {
+            if (
+              u.id === message.targetUserId ||
+              u.username === message.targetUsername
+            ) {
+              return {
+                ...u,
+                isAdmin: message.isPromotion ?? false,
+              };
+            }
+            return u;
+          });
+
+          return {
+            ...prev,
+            users: updatedUsers,
+          };
+        });
+
+        // Add a system notification to the chat messages
+        if (message.content) {
+          const systemMessage: ChatMessage = {
+            id: message.messageId || Date.now(),
+            text: message.content,
+            author: "System",
+            time: Math.floor(
+              message.timestamp
+                ? new Date(message.timestamp).getTime() / 1000
+                : Date.now() / 1000
+            ),
+            isDeleted: false,
+            isEdited: false,
+            isSystem: true,
+            isForwarded: false,
+          };
+
+          // Add this message if it doesn't already exist
+          setCurrentMessages((prev) => {
+            // Check if we already have this message (by ID or content)
+            const exists = prev.some(
+              (m) =>
+                (message.messageId && m.id === message.messageId) ||
+                (m.isSystem && m.text === message.content)
+            );
+            if (exists) return prev;
+
+            return [...prev, systemMessage];
+          });
+        }
+      }
+
+      // Always refresh the chat list to ensure everything is up to date
+      fetchChats();
+    },
+    [currentChat]
+  );
+
+  // Handle member removed notification from WebSocket
+  const handleMemberRemoved = useCallback(
+    (message: WebSocketMessage) => {
+      console.log("Received member removed notification:", message);
+
+      if (!currentChat || !user) return;
+
+      // If this is about the current chat
+      if (message.chatId === currentChat.id) {
+        // Update the user list to remove the user
+        setCurrentChat((prev) => {
+          if (!prev) return null;
+
+          const updatedUsers = prev.users.filter(
+            (u) =>
+              u.id !== message.targetUserId &&
+              u.username !== message.targetUsername
+          );
+
+          return {
+            ...prev,
+            users: updatedUsers,
+          };
+        });
+
+        // Add a system notification to the chat messages
+        if (message.content) {
+          const systemMessage: ChatMessage = {
+            id: message.messageId || Date.now(),
+            text: message.content,
+            author: "System",
+            time: Math.floor(
+              message.timestamp
+                ? new Date(message.timestamp).getTime() / 1000
+                : Date.now() / 1000
+            ),
+            isDeleted: false,
+            isEdited: false,
+            isSystem: true,
+            isForwarded: false,
+          };
+
+          // Add this message if it doesn't already exist
+          setCurrentMessages((prev) => {
+            // Check if we already have this message (by ID or content)
+            const exists = prev.some(
+              (m) =>
+                (message.messageId && m.id === message.messageId) ||
+                (m.isSystem && m.text === message.content)
+            );
+            if (exists) return prev;
+
+            return [...prev, systemMessage];
+          });
+        }
+
+        // If I'm the one being removed, close this chat
+        if (
+          (message.targetUserId && message.targetUserId === user.id) ||
+          (message.targetUsername && message.targetUsername === user.username)
+        ) {
+          // Show notification
+          showToast(`You were removed from ${currentChat.name}`, "info");
+
+          // Close the chat
+          setCurrentChat(null);
+          setCurrentMessages([]);
+
+          // Refresh the chat list to remove this chat
+          fetchChats();
+        }
+      }
+
+      // Always refresh the chat list to ensure everything is up to date
+      fetchChats();
+    },
+    [currentChat, user, showToast]
+  );
+
+  // Handle member added notification from WebSocket
+  const handleMemberAdded = useCallback(
+    (message: WebSocketMessage) => {
+      console.log("Received member added notification:", message);
+
+      if (!currentChat) return;
+
+      // If this is about the current chat
+      if (message.chatId === currentChat.id) {
+        // Update the user list to add the new member
+        if (message.targetUsername && message.targetUserId) {
+          setCurrentChat((prev) => {
+            if (!prev) return null;
+
+            // Check if user already exists
+            const userExists = prev.users.some(
+              (u) =>
+                u.id === message.targetUserId ||
+                u.username === message.targetUsername
+            );
+
+            if (userExists) return prev;
+
+            // Add the new user with properties that match the ChatUser interface
+            const newUser: ChatUser = {
+              id: message.targetUserId || 0, // Ensure we have a number (not undefined)
+              username: message.targetUsername || "",
+              is_admin: false, // Use the snake_case property name as defined in the interface
+              is_verified: false,
+              is_tester: false,
+            };
+
+            return {
+              ...prev,
+              users: [...prev.users, newUser],
+            };
+          });
+        }
+
+        // Add a system notification to the chat messages
+        if (message.content) {
+          // Generate a unique key for deduplication
+          const messageKey = `member_added_${message.targetUserId}_${Date.now().toString().substring(0, 8)}`;
+
+          const systemMessage: ChatMessage = {
+            id: message.messageId || Date.now(),
+            text: message.content,
+            author: "System",
+            time: Math.floor(
+              message.timestamp
+                ? new Date(message.timestamp).getTime() / 1000
+                : Date.now() / 1000
+            ),
+            isDeleted: false,
+            isEdited: false,
+            isSystem: true,
+            isForwarded: false,
+            messageKey, // Add key for deduplication
+          };
+
+          // Add this message if it doesn't already exist
+          setCurrentMessages((prev) => {
+            // Check if we already have this message (by ID, content, or key)
+            const exists = prev.some(
+              (m) =>
+                (message.messageId && m.id === message.messageId) ||
+                (m.isSystem && m.text === message.content) ||
+                (m.messageKey && m.messageKey === messageKey)
+            );
+            if (exists) return prev;
+
+            return [...prev, systemMessage];
+          });
+        }
+
+        // When a member is added, refresh the chat to get the full updated member list
+        if (message.updateType === "MEMBER_ADDED") {
+          // Refresh the chat after a short delay to ensure backend consistency
+          setTimeout(() => openChat(currentChat.id), 500);
+        }
+      }
+
+      // Always refresh the chat list to ensure everything is up to date
+      fetchChats();
+    },
+    [currentChat]
+  );
 
   // Handle WebSocket chat update messages (new chats, added to groups)
   const handleChatUpdateMessage = useCallback(
@@ -248,105 +523,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, [token, user, wsConnected]);
 
-  // Set up WebSocket listeners for admin status changes
-  useEffect(() => {
-    if (!token || !user || !user.id || !wsConnected) return;
-
-    // Subscribe to admin status changes
-    websocketService.subscribeToAdminStatusChanges(user.id, (message) => {
-      console.log("Received admin status change:", message);
-
-      if (
-        message.type === "CHAT_UPDATE" &&
-        message.updateType === "ADMIN_CHANGED"
-      ) {
-        // If the user's admin status changed in the current chat, refresh the chat details
-        if (currentChat && message.chatId === currentChat.id) {
-          // Check if this is about the current user
-          const isAboutCurrentUser =
-            message.content &&
-            (message.content.includes(
-              `removed admin rights from ${user?.username}`
-            ) ||
-              message.content.includes(`made ${user?.username} an admin`));
-
-          if (isAboutCurrentUser) {
-            console.log("Admin status changed for current user");
-
-            // Immediately update the current chat object to reflect admin status change
-            if (
-              message.content.includes(
-                `removed admin rights from ${user?.username}`
-              )
-            ) {
-              // If user lost admin rights, immediately update the UI by modifying the admins array
-              setCurrentChat((prevChat) => {
-                if (!prevChat) return null;
-
-                // Remove current user from admins array
-                const newAdmins = prevChat.admins.filter(
-                  (admin) => admin !== user.username
-                );
-
-                return {
-                  ...prevChat,
-                  admins: newAdmins,
-                };
-              });
-
-              // Then fully refresh the chat details
-              openChat(currentChat.id);
-              // Show notification to the user
-              showToast("You are no longer an admin in this group", "info");
-            } else if (
-              message.content.includes(`made ${user?.username} an admin`)
-            ) {
-              // If user gained admin rights, immediately update the UI by modifying the admins array
-              setCurrentChat((prevChat) => {
-                if (!prevChat) return null;
-
-                // Add current user to admins array if not already there
-                if (!prevChat.admins.includes(user.username)) {
-                  return {
-                    ...prevChat,
-                    admins: [...prevChat.admins, user.username],
-                  };
-                }
-                return prevChat;
-              });
-
-              // Then fully refresh the chat details
-              openChat(currentChat.id);
-              // Show notification to the user
-              showToast("You are now an admin in this group", "info");
-            }
-          } else {
-            // Admin change for someone else, just refresh the chat
-            openChat(currentChat.id);
-          }
-        }
-      }
-    });
-
-    // Subscribe to user removal notifications
-    websocketService.subscribeToUserRemovals(user.id, (message) => {
-      console.log("Received user removal notification:", message);
-
-      if (
-        message.type === "CHAT_UPDATE" &&
-        message.updateType === "MEMBER_REMOVED"
-      ) {
-        // If the user was removed from the current chat, handle it
-        if (currentChat && message.chatId === currentChat.id) {
-          setCurrentChat(null);
-          setCurrentMessages([]);
-          showToast("You have been removed from this group", "info");
-          router.push("/chats");
-        }
-      }
-    });
-  }, [token, user, wsConnected, currentChat, router, showToast]);
-
   // Handle WebSocket messages for the current chat
   const handleWebSocketMessage = useCallback(
     (message: WebSocketMessage) => {
@@ -371,22 +547,80 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Handle system messages about user removal immediately - redirect if it's about current user
         if (
           message.isSystem &&
-          message.content.includes(`removed ${user?.username} from the group`)
+          user?.username &&
+          message.content.includes(`removed ${user.username} from the group`)
         ) {
           // User has been removed from this group
           setCurrentChat(null);
           setCurrentMessages([]);
-          showToast("You have been removed from this group", "info");
+
+          // Show notification only once
+          const removalKey = `removed_from_${message.chatId}`;
+          const storedRemoval = sessionStorage.getItem(removalKey);
+
+          if (!storedRemoval) {
+            sessionStorage.setItem(removalKey, Date.now().toString());
+            showToast("You have been removed from this group", "info");
+          }
+
+          // Redirect to chats page
           router.push("/chats");
+          return;
+        }
+
+        // Handle system messages about other users being removed
+        if (
+          message.isSystem &&
+          message.content &&
+          message.content.includes("removed") &&
+          message.content.includes("from the group")
+        ) {
+          console.log(
+            "Detected system message about user removal:",
+            message.content
+          );
+
+          // If it's the current chat, update the UI to reflect the member removal
+          if (currentChat && message.chatId === currentChat.id) {
+            // Extract the username of the removed user from the message
+            const contentParts = message.content.split(" ");
+            const removedUserIndex =
+              contentParts.findIndex((part) => part === "removed") + 1;
+
+            if (
+              removedUserIndex > 0 &&
+              removedUserIndex < contentParts.length
+            ) {
+              const removedUsername = contentParts[removedUserIndex];
+
+              // Update the current chat by removing the user from users array
+              setCurrentChat((prevChat) => {
+                if (!prevChat) return null;
+                return {
+                  ...prevChat,
+                  users: prevChat.users.filter(
+                    (u) => u.username !== removedUsername
+                  ),
+                };
+              });
+            }
+          }
+
+          // Add the system message to the chat feed
+          setCurrentMessages((prev) => [...prev, newMessage]);
+
+          // Refresh chats list to update member counts
+          fetchChats();
           return;
         }
 
         // Handle admin status change messages - refresh immediately
         if (
           message.isSystem &&
-          (message.content.includes(`made ${user?.username} an admin`) ||
+          user?.username &&
+          (message.content.includes(`made ${user.username} an admin`) ||
             message.content.includes(
-              `removed admin rights from ${user?.username}`
+              `removed admin rights from ${user.username}`
             ))
         ) {
           // Admin status has changed for current user - refresh the chat
@@ -477,23 +711,115 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }, 3000); // Adjust the delay as needed
       } else if (message.type === "CHAT_UPDATE") {
         // Handle chat update messages like member removed/added/etc.
-        if (
-          message.updateType === "MEMBER_REMOVED" &&
-          message.content.includes(user?.username || "")
+        if (message.updateType === "MEMBER_REMOVED") {
+          // If it's about the current user, handle removal
+          if (
+            user?.username &&
+            (message.targetUserId === user.id ||
+              message.targetUsername === user.username ||
+              (message.content && message.content.includes(user.username)))
+          ) {
+            // Current user was removed from this chat - clear current chat state
+            setCurrentChat(null);
+            setCurrentMessages([]);
+
+            // Show notification only once
+            const removalKey = `removed_from_${message.chatId}`;
+            const storedRemoval = sessionStorage.getItem(removalKey);
+
+            if (!storedRemoval) {
+              sessionStorage.setItem(removalKey, Date.now().toString());
+              showToast("You have been removed from this group", "info");
+            }
+
+            // Redirect to chats page
+            router.push("/chats");
+          }
+          // If it's about another user, update the member list
+          else if (currentChat && message.chatId === currentChat.id) {
+            console.log("Another user was removed, updating member list");
+
+            // Create a system message about the removal
+            const systemMessage: ChatMessage = {
+              id: message.messageId || Date.now(),
+              text:
+                message.content ||
+                `${message.username || "Someone"} removed ${message.targetUsername || "a user"} from the group`,
+              author: "System",
+              time: new Date(message.timestamp).getTime() / 1000,
+              isDeleted: false,
+              isEdited: false,
+              isSystem: true,
+              isForwarded: false,
+            };
+
+            // Add the system message to the chat
+            setCurrentMessages((prev) => [...prev, systemMessage]);
+
+            // Update the member list
+            if (message.targetUsername) {
+              setCurrentChat((prevChat) => {
+                if (!prevChat) return null;
+                return {
+                  ...prevChat,
+                  users: prevChat.users.filter(
+                    (u) => u.username !== message.targetUsername
+                  ),
+                };
+              });
+            } else if (message.targetUserId) {
+              setCurrentChat((prevChat) => {
+                if (!prevChat) return null;
+                return {
+                  ...prevChat,
+                  users: prevChat.users.filter(
+                    (u) => u.id !== message.targetUserId
+                  ),
+                };
+              });
+            }
+          }
+
+          // Always refresh chats list to update any affected chats
+          fetchChats();
+        } else if (
+          message.updateType === "MEMBER_ADDED" &&
+          currentChat &&
+          message.chatId === currentChat.id
         ) {
-          // Current user was removed from this chat
-          setCurrentChat(null);
-          setCurrentMessages([]);
-          showToast("You have been removed from this group", "info");
-          router.push("/chats");
+          console.log("User was added to chat, updating UI");
+
+          // Create a system message about the addition
+          const systemMessage: ChatMessage = {
+            id: message.messageId || Date.now(),
+            text:
+              message.content ||
+              `${message.username || "Someone"} added ${message.targetUsername || "a user"} to the group`,
+            author: "System",
+            time: new Date(message.timestamp).getTime() / 1000,
+            isDeleted: false,
+            isEdited: false,
+            isSystem: true,
+            isForwarded: false,
+          };
+
+          // Add the system message to the chat
+          setCurrentMessages((prev) => [...prev, systemMessage]);
+
+          // Refresh the chat to get the updated member list
+          openChat(currentChat.id);
+
+          // Always refresh chats list
+          fetchChats();
         } else if (message.updateType === "ADMIN_CHANGED") {
           // Admin status has changed - refresh the chat to update UI
           if (currentChat && message.chatId === currentChat.id) {
             // Check if this is about the current user
             if (
+              user?.username &&
               message.content &&
               message.content.includes(
-                `removed admin rights from ${user?.username}`
+                `removed admin rights from ${user.username}`
               )
             ) {
               console.log("Current user lost admin rights");
@@ -502,14 +828,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               // Show notification to the user
               showToast("You are no longer an admin in this group", "info");
             } else if (
+              user?.username &&
               message.content &&
-              message.content.includes(`made ${user?.username} an admin`)
+              message.content.includes(`made ${user.username} an admin`)
             ) {
               console.log("Current user became an admin");
               // Force refresh the chat details
               openChat(currentChat.id);
               // Show notification to the user
-              showToast("You are now an admin in this group", "info");
+              showToast("You are now an admin in this group", "success");
             } else {
               // Admin change for someone else, just refresh the chat
               openChat(currentChat.id);
@@ -518,7 +845,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [user?.username, user?.id, router, currentChat, showToast]
+    [user, router, currentChat, showToast]
   );
 
   // Subscribe to current chat WebSocket updates
@@ -806,40 +1133,81 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addMember = async (username: string, message: string) => {
-    if (!token || !currentChat) return;
+  /**
+   * Add a member to a chat
+   */
+  const addMember = async (
+    chatId: number,
+    userId: number,
+    username: string
+  ): Promise<boolean> => {
+    if (!token || !currentChat) return false;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await chatApi.addMember(
-        token,
-        currentChat.id,
-        username,
-        message
-      );
+      const response = await chatApi.addMember(token, chatId, username, "");
 
       if (response.status) {
-        // Refresh current chat after adding a member
-        await openChat(currentChat.id);
+        // Create optimistic system message to show immediately
+        const systemMessage: ChatMessage = {
+          id: Date.now(),
+          text: `${user?.username} added ${username} to the group`,
+          author: "System",
+          time: Math.floor(Date.now() / 1000),
+          isDeleted: false,
+          isEdited: false,
+          isSystem: true,
+          isForwarded: false,
+          isPending: true,
+        };
+
+        // Add system message to chat immediately for better UX
+        setCurrentMessages((prev) => [...prev, systemMessage]);
+
+        // Update the member list optimistically
+        setCurrentChat((prevChat) => {
+          if (!prevChat) return null;
+
+          // Check if user already exists
+          const userExists = prevChat.users.some(
+            (u) => u.id === userId || u.username === username
+          );
+
+          if (userExists) return prevChat;
+
+          // Add the new user to the list
+          return {
+            ...prevChat,
+            users: [
+              ...prevChat.users,
+              {
+                id: userId,
+                username: username,
+                is_admin: false,
+              },
+            ],
+          };
+        });
 
         // Notify via WebSocket if connected
         if (wsConnected && user) {
-          // We can't get the target user's ID immediately since they were just added
-          // and might not be in our local user list yet, so we'll use a placeholder ID of 0
-          // The backend will resolve the actual user ID from the username
-          websocketService.sendMemberAdded(
-            currentChat.id,
-            0, // Placeholder ID, backend will resolve from username
-            username
-          );
+          websocketService.sendMemberAdded(chatId, userId, username);
         }
+
+        // Refresh current chat after adding a member to ensure we have the latest state
+        await openChat(chatId);
+
+        showToast(`Added ${username} to the chat`, "success");
+        return true;
       } else {
         setError("Failed to add member");
+        return false;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add member");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -852,6 +1220,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
+      // Find the target user to get their ID before removal
+      const targetUser = currentChat.users.find((u) => u.username === username);
+      const targetUserId = targetUser?.id;
+
       const response = await chatApi.removeMember(
         token,
         currentChat.id,
@@ -860,23 +1232,49 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       );
 
       if (response.status) {
-        // Refresh current chat after removing a member
-        await openChat(currentChat.id);
+        // Create optimistic system message to show immediately
+        const systemMessage: ChatMessage = {
+          id: Date.now(),
+          text: `${user?.username} removed ${username} from the group`,
+          author: "System",
+          time: Math.floor(Date.now() / 1000),
+          isDeleted: false,
+          isEdited: false,
+          isSystem: true,
+          isForwarded: false,
+          isPending: true,
+        };
+
+        // Add system message to chat immediately for better UX
+        setCurrentMessages((prev) => [...prev, systemMessage]);
+
+        // Update the member list optimistically
+        setCurrentChat((prevChat) => {
+          if (!prevChat) return null;
+          return {
+            ...prevChat,
+            users: prevChat.users.filter((u) => u.username !== username),
+          };
+        });
 
         // Notify via WebSocket if connected
-        if (wsConnected && user) {
-          // Find the target user to get their ID
-          const targetUser = currentChat.users?.find(
-            (u) => u.username === username
+        if (wsConnected && user && targetUserId) {
+          websocketService.sendMemberRemoved(
+            currentChat.id,
+            targetUserId,
+            username
           );
-          if (targetUser) {
-            websocketService.sendMemberRemoved(
-              currentChat.id,
-              targetUser.id,
-              username
-            );
-          }
+        } else if (wsConnected && user) {
+          // If we couldn't find the user ID, use the WebSocket endpoint that can handle just usernames
+          websocketService.sendMemberRemoved(
+            currentChat.id,
+            0, // Backend will resolve from username
+            username
+          );
         }
+
+        // Refresh current chat after removing a member to ensure we have the latest state
+        await openChat(currentChat.id);
       } else {
         setError("Failed to remove member");
       }
@@ -916,92 +1314,164 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
 
   const addAdmin = async (username: string, message: string) => {
-    if (!token || !currentChat) return;
-
-    setLoading(true);
-    setError(null);
+    if (!token || !currentChat || !user) return;
 
     try {
-      const response = await chatApi.addAdmin(
-        token,
-        currentChat.id,
-        username,
-        message
-      );
+      // Find the target user in the chat member list to get their ID
+      const targetUser = currentChat.users.find((u) => u.username === username);
 
-      if (response.status) {
-        // Refresh current chat after adding an admin
-        await openChat(currentChat.id);
+      if (!targetUser) {
+        showToast(`User ${username} not found in this chat`, "error");
+        return;
+      }
 
-        // Notify via WebSocket if connected
-        if (wsConnected && user) {
-          // Find the target user to get their ID
-          const targetUser = currentChat.users?.find(
-            (u) => u.username === username
-          );
-          if (targetUser) {
-            websocketService.sendAdminStatusChanged(
-              currentChat.id,
-              targetUser.id,
-              username,
-              true // isPromotion = true for adding admin
-            );
-          }
-        }
+      // Send websocket message to change admin status
+      if (wsConnected) {
+        console.log(`Adding admin ${username} via WebSocket`);
+
+        // Create system message content
+        const systemMessage = `${user.username} made ${username} an admin`;
+
+        // Add optimistic message to chat
+        const optimisticMsg: ChatMessage = {
+          id: Date.now(),
+          text: systemMessage,
+          author: "System",
+          time: Math.floor(Date.now() / 1000),
+          isDeleted: false,
+          isEdited: false,
+          isSystem: true,
+          isForwarded: false,
+          isPending: true,
+        };
+
+        // Add the message optimistically
+        setCurrentMessages((prev) => [...prev, optimisticMsg]);
+
+        // Also update the admin status in current chat
+        setCurrentChat((prevChat) => {
+          if (!prevChat) return null;
+
+          return {
+            ...prevChat,
+            admins: [...prevChat.admins, username],
+          };
+        });
+
+        // Send WebSocket message to change admin status
+        websocketService.sendAdminStatusChange(
+          currentChat.id,
+          targetUser.id,
+          username,
+          true // isPromotion = true
+        );
+
+        // Show confirmation toast
+        showToast(`${username} is now an admin`, "success");
       } else {
-        setError("Failed to make user an admin");
+        // Fallback to REST API if WebSocket is not connected
+        setLoading(true);
+        const response = await chatApi.addAdmin(
+          token,
+          currentChat.id,
+          username,
+          message
+        );
+
+        if (response.status) {
+          // Refresh the chat to get updated admin status
+          await openChat(currentChat.id);
+        } else {
+          showToast("Failed to make user an admin", "error");
+        }
+        setLoading(false);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to make user an admin"
+      showToast(
+        err instanceof Error ? err.message : "Failed to make user an admin",
+        "error"
       );
-    } finally {
-      setLoading(false);
     }
   };
 
   const removeAdmin = async (username: string, message: string) => {
-    if (!token || !currentChat) return;
-
-    setLoading(true);
-    setError(null);
+    if (!token || !currentChat || !user) return;
 
     try {
-      const response = await chatApi.removeAdmin(
-        token,
-        currentChat.id,
-        username,
-        message
-      );
+      // Find the target user in the chat member list to get their ID
+      const targetUser = currentChat.users.find((u) => u.username === username);
 
-      if (response.status) {
-        // Refresh current chat after removing admin status
-        await openChat(currentChat.id);
+      if (!targetUser) {
+        showToast(`User ${username} not found in this chat`, "error");
+        return;
+      }
 
-        // Notify via WebSocket if connected
-        if (wsConnected && user) {
-          // Find the target user to get their ID
-          const targetUser = currentChat.users?.find(
-            (u) => u.username === username
-          );
-          if (targetUser) {
-            websocketService.sendAdminStatusChanged(
-              currentChat.id,
-              targetUser.id,
-              username,
-              false // isPromotion = false for removing admin
-            );
-          }
-        }
+      // Send websocket message to change admin status
+      if (wsConnected) {
+        console.log(`Removing admin ${username} via WebSocket`);
+
+        // Create system message content
+        const systemMessage = `${user.username} removed admin rights from ${username}`;
+
+        // Add optimistic message to chat
+        const optimisticMsg: ChatMessage = {
+          id: Date.now(),
+          text: systemMessage,
+          author: "System",
+          time: Math.floor(Date.now() / 1000),
+          isDeleted: false,
+          isEdited: false,
+          isSystem: true,
+          isForwarded: false,
+          isPending: true,
+        };
+
+        // Add the message optimistically
+        setCurrentMessages((prev) => [...prev, optimisticMsg]);
+
+        // Also update the admin status in current chat
+        setCurrentChat((prevChat) => {
+          if (!prevChat) return null;
+
+          return {
+            ...prevChat,
+            admins: prevChat.admins.filter((admin) => admin !== username),
+          };
+        });
+
+        // Send WebSocket message to change admin status
+        websocketService.sendAdminStatusChange(
+          currentChat.id,
+          targetUser.id,
+          username,
+          false // isPromotion = false
+        );
+
+        // Show confirmation toast
+        showToast(`${username} is no longer an admin`, "success");
       } else {
-        setError("Failed to remove admin status");
+        // Fallback to REST API if WebSocket is not connected
+        setLoading(true);
+        const response = await chatApi.removeAdmin(
+          token,
+          currentChat.id,
+          username,
+          message
+        );
+
+        if (response.status) {
+          // Refresh the chat to get updated admin status
+          await openChat(currentChat.id);
+        } else {
+          showToast("Failed to remove admin status", "error");
+        }
+        setLoading(false);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to remove admin status"
+      showToast(
+        err instanceof Error ? err.message : "Failed to remove admin status",
+        "error"
       );
-    } finally {
-      setLoading(false);
     }
   };
 
