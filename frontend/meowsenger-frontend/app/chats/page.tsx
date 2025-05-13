@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useChat } from "@/contexts/chat-context";
@@ -30,7 +30,6 @@ export default function ChatsPage() {
     message: "",
     type: "info",
   });
-
   // Update filtered chats when chats change or search query changes
   useEffect(() => {
     if (searchQuery) {
@@ -42,7 +41,71 @@ export default function ChatsPage() {
       setFilteredChats(chats);
     }
   }, [chats, searchQuery]);
+  // Automatically refresh chats when WebSocket messages are received
+  const webSocketUpdateRef = useRef<{
+    timer: NodeJS.Timeout | null;
+    lastUpdateTime: number;
+  }>({
+    timer: null,
+    lastUpdateTime: 0,
+  });
 
+  useEffect(() => {
+    // Enhanced WebSocket event handler with smarter debouncing
+    const handleWebSocketEvent = (e: Event) => {
+      const now = Date.now();
+      const customEvent = e as CustomEvent;
+      const detail = customEvent.detail || {};
+      const eventType = detail.type || "unknown";
+
+      // Clear any existing timer
+      if (webSocketUpdateRef.current.timer) {
+        clearTimeout(webSocketUpdateRef.current.timer);
+      }
+
+      // Rate limiting - prevent excessive refreshes
+      const timeSinceLastUpdate =
+        now - webSocketUpdateRef.current.lastUpdateTime;
+
+      // Set different debounce times based on event type
+      let debounceTime = 300; // default debounce
+
+      // Different event types might need different priorities
+      if (eventType === "chat_update" || eventType === "member_removed") {
+        debounceTime = 200; // higher priority events
+      } else if (eventType === "fetch_chats") {
+        // Don't refresh if we just did a fetch within 1 second
+        if (timeSinceLastUpdate < 1000) {
+          console.log("Skipping redundant chat refresh:", eventType);
+          return;
+        }
+      }
+
+      console.log(
+        `WebSocket event (${eventType}) will trigger chat refresh in ${debounceTime}ms`
+      );
+
+      // Schedule the refresh
+      webSocketUpdateRef.current.timer = setTimeout(() => {
+        console.log(`Refreshing chat list due to ${eventType} event`);
+        fetchChats();
+        webSocketUpdateRef.current.lastUpdateTime = Date.now();
+      }, debounceTime);
+    };
+
+    // Add event listener for the custom event
+    window.addEventListener("meowsenger:ws:chatupdate", handleWebSocketEvent);
+
+    return () => {
+      window.removeEventListener(
+        "meowsenger:ws:chatupdate",
+        handleWebSocketEvent
+      );
+      if (webSocketUpdateRef.current.timer) {
+        clearTimeout(webSocketUpdateRef.current.timer);
+      }
+    };
+  }, [fetchChats]);
   // Format chats for the ChatList component
   const formattedChats = filteredChats.map((chat) => ({
     id: chat.id.toString(),

@@ -6,12 +6,15 @@ import {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { useAuth } from "./auth-context";
 import { chatApi, GroupResponse } from "@/utils/api-client";
 import websocketService, { WebSocketMessage } from "@/utils/websocket-service";
 import { useToast } from "./toast-context";
 import { useRouter } from "next/navigation"; // Import router for redirection
+import useMessageHandler from "@/hooks/useMessageHandler";
+import MessageCache from "@/utils/message-cache";
 
 // Chat types
 export interface ChatMessage {
@@ -121,7 +124,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [typingUsers, setTypingUsers] = useState<
     { userId: number; username: string }[]
   >([]);
-  // Track recent join/leave events to prevent duplicates
+
+  // Use our message handling hook for optimized message processing
+  const messageHandler = useMessageHandler();
+
+  // Initialize message cache
+  const messageCache = useMemo(() => MessageCache.getInstance(), []);
+
+  // Add automatic message cache cleanup
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (currentChat) {
+        // Clean up pending messages periodically to prevent memory leaks
+        const removed = messageHandler.cleanupPendingMessages();
+        if (removed > 0) {
+          console.log(`Cleaned up ${removed} stale pending messages`);
+        }
+      }
+    }, 30000); // Run every 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [currentChat, messageHandler]);
+
   const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
     new Map()
   );
@@ -130,8 +154,34 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   // Store oldest message ID for pagination
   const oldestMessageIdRef = useRef<number | null>(null);
+  // Reference functions to avoid circular dependencies in useCallback hooks
+  const refreshChatsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const openChatRef = useRef<(chatId: string | number) => Promise<void>>(() =>
+    Promise.resolve()
+  );
 
   const { showToast } = useToast();
+
+  // Centralized WebSocket event handling
+  const dispatchChatUpdateEvent = useCallback(
+    (eventType: string, metadata?: any) => {
+      try {
+        // Create a CustomEvent to allow passing metadata
+        const event = new CustomEvent("meowsenger:ws:chatupdate", {
+          detail: {
+            type: eventType,
+            timestamp: Date.now(),
+            metadata,
+          },
+        });
+        window.dispatchEvent(event);
+        console.log(`Dispatched chat update event: ${eventType}`);
+      } catch (eventError) {
+        console.error(`Error dispatching ${eventType} event:`, eventError);
+      }
+    },
+    []
+  );
 
   // Clean up old join events periodically (every 30 seconds)
   useEffect(() => {
@@ -199,6 +249,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
   }, [token, user, wsConnected]);
 
+  // Helper function to trigger a chat list update event
+  const triggerChatListUpdate = useCallback(() => {
+    dispatchChatUpdateEvent("chatlist_update");
+  }, [dispatchChatUpdateEvent]);
+
   // Handle admin status change notification from WebSocket
   const handleAdminStatusChange = useCallback(
     (message: WebSocketMessage) => {
@@ -261,9 +316,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             return [...prev, systemMessage];
           });
         }
-      }
-
-      // Always refresh the chat list to ensure everything is up to date
+      } // Always refresh the chat list to ensure everything is up to date
       fetchChats();
     },
     [currentChat]
@@ -340,12 +393,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           // Refresh the chat list to remove this chat
           fetchChats();
         }
-      }
-
-      // Always refresh the chat list to ensure everything is up to date
+      } // Always refresh the chat list to ensure everything is up to date
       fetchChats();
     },
-    [currentChat, user, showToast]
+    [currentChat, user]
   );
 
   // Handle member added notification from WebSocket
@@ -421,9 +472,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
             return [...prev, systemMessage];
           });
-        }
-
-        // When a member is added, refresh the chat to get the full updated member list
+        } // When a member is added, refresh the chat to get the full updated member list
         if (message.updateType === "MEMBER_ADDED") {
           // Refresh the chat after a short delay to ensure backend consistency
           setTimeout(() => openChat(currentChat.id), 500);
@@ -435,25 +484,46 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     },
     [currentChat]
   );
-
   // Handle WebSocket chat update messages (new chats, added to groups)
   const handleChatUpdateMessage = useCallback(
     (message: WebSocketMessage) => {
       console.log("Received chat update message:", message);
-
       if (message.type === "CHAT_UPDATE") {
-        // Refresh the chat list to show the new/updated chat
+        // Always refresh the chat list to show the new/updated chat
         fetchChats();
 
-        // Show a notification to the user
+        // Trigger a custom event to notify the chat list should be refreshed
+        dispatchChatUpdateEvent("chat_update", {
+          updateType: message.updateType,
+        });
+
+        // Show a notification to the user based on update type
         if (message.updateType === "NEW_CHAT") {
           showToast(`You were added to ${message.chatName}`, "info");
         } else if (message.updateType === "MEMBER_ADDED") {
-          showToast(message.content, "info");
+          showToast(
+            message.content || "A new member was added to a chat",
+            "info"
+          );
+        } else if (message.updateType === "MEMBER_REMOVED") {
+          showToast(
+            message.content || "A member was removed from a chat",
+            "info"
+          );
+        } else if (message.updateType === "ADMIN_CHANGED") {
+          showToast(
+            message.content || "Admin status changed in a chat",
+            "info"
+          );
+        } else if (message.updateType === "SETTINGS_CHANGED") {
+          showToast(
+            message.updateMessage || "Chat settings were updated",
+            "info"
+          );
         }
       }
     },
-    [showToast]
+    [showToast, dispatchChatUpdateEvent]
   );
 
   // Connect to WebSocket when user is authenticated
@@ -487,20 +557,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setWsConnected(false);
     };
   }, [token, user, handleChatUpdateMessage]);
-
-  // Set up periodic chat list refresh to catch new chats
+  // Set up adaptive polling for chat list refresh
   useEffect(() => {
     if (!token) return;
 
     // Fetch chats initially
-    fetchChats();
+    fetchChats(true);
 
-    // Set up periodic polling as a fallback to WebSocket
-    const interval = setInterval(() => {
+    // Adaptive polling interval based on user activity
+    let pollingInterval = 10000; // Start with 10 seconds
+    let lastUserActivity = Date.now();
+    let inactiveTimeThreshold = 60000; // 1 minute
+    let maxPollingInterval = 30000; // 30 seconds when inactive
+
+    // Track user activity
+    const updateUserActivity = () => {
+      lastUserActivity = Date.now();
+      // Reset to faster polling when user is active
+      pollingInterval = 10000;
+    };
+
+    // User activity listeners
+    window.addEventListener("mousemove", updateUserActivity);
+    window.addEventListener("keydown", updateUserActivity);
+    window.addEventListener("click", updateUserActivity);
+
+    // Set up adaptive polling interval
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      const timeSinceActivity = now - lastUserActivity;
+
+      // If user has been inactive, slow down polling
+      if (timeSinceActivity > inactiveTimeThreshold) {
+        pollingInterval = Math.min(pollingInterval * 1.5, maxPollingInterval);
+        console.log(`User inactive, adjusted polling to ${pollingInterval}ms`);
+      }
+
       fetchChats();
-    }, 10000);
+    }, pollingInterval);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("mousemove", updateUserActivity);
+      window.removeEventListener("keydown", updateUserActivity);
+      window.removeEventListener("click", updateUserActivity);
+    };
   }, [token]);
 
   // Set up WebSocket listeners for read receipts
@@ -778,10 +879,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 };
               });
             }
-          }
-
-          // Always refresh chats list to update any affected chats
+          } // Always refresh chats list to update any affected chats
           fetchChats();
+
+          // Trigger a custom event to notify the chat list should be refreshed
+          dispatchChatUpdateEvent("member_removed", { chatId: message.chatId });
         } else if (
           message.updateType === "MEMBER_ADDED" &&
           currentChat &&
@@ -807,10 +909,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setCurrentMessages((prev) => [...prev, systemMessage]);
 
           // Refresh the chat to get the updated member list
-          openChat(currentChat.id);
-
-          // Always refresh chats list
+          openChat(currentChat.id); // Always refresh chats list
           fetchChats();
+
+          // Trigger an event for real-time chat list refresh
+          dispatchChatUpdateEvent("member_added", { chatId: message.chatId });
         } else if (message.updateType === "ADMIN_CHANGED") {
           // Admin status has changed - refresh the chat to update UI
           if (currentChat && message.chatId === currentChat.id) {
@@ -842,10 +945,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               openChat(currentChat.id);
             }
           }
+
+          // Always refresh the chat list to ensure everything is up to date
+          fetchChats();
         }
       }
     },
-    [user, router, currentChat, showToast]
+    [user, router, currentChat, showToast, dispatchChatUpdateEvent]
   );
 
   // Subscribe to current chat WebSocket updates
@@ -915,25 +1021,72 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
 
     fetchInitialChats();
-  }, [token]);
+  }, [token]); // Optimize fetchChats with caching and debouncing
+  const fetchChatsRef = useRef<{
+    lastFetchTime: number;
+    inProgress: boolean;
+    pendingRequest: boolean;
+  }>({
+    lastFetchTime: 0,
+    inProgress: false,
+    pendingRequest: false,
+  });
 
-  const fetchChats = async () => {
-    if (!token) return;
+  const fetchChats = useCallback(
+    async (force = false) => {
+      if (!token) return;
 
-    try {
-      const response = await chatApi.getChats(token, chats.length, lastUpdate);
+      const now = Date.now();
+      const fetchRef = fetchChatsRef.current;
 
-      if (response.status && response.data?.length > 0) {
-        setChats(response.data);
-        if (response.time) {
-          setLastUpdate(response.time);
+      // Prevent rapid successive calls (debounce)
+      if (!force && fetchRef.inProgress) {
+        fetchRef.pendingRequest = true;
+        return;
+      }
+
+      // Implement basic caching (skip if last fetch was < 2 seconds ago)
+      if (!force && now - fetchRef.lastFetchTime < 2000) {
+        return;
+      }
+
+      fetchRef.inProgress = true;
+      fetchRef.pendingRequest = false;
+
+      try {
+        const response = await chatApi.getChats(
+          token,
+          chats.length,
+          lastUpdate
+        );
+        fetchRef.lastFetchTime = now;
+
+        if (response.status && response.data) {
+          // Only update if there are changes
+          if (response.data.length > 0) {
+            setChats(response.data);
+            if (response.time) {
+              setLastUpdate(response.time);
+            }
+
+            // Dispatch event to notify about chat update
+            dispatchChatUpdateEvent("fetch_chats");
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch chats");
+        console.error("Error fetching chats:", err);
+      } finally {
+        fetchRef.inProgress = false;
+
+        // Handle pending requests
+        if (fetchRef.pendingRequest) {
+          setTimeout(() => fetchChats(true), 100);
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch chats");
-      console.error("Error fetching chats:", err);
-    }
-  };
+    },
+    [token, chats.length, lastUpdate, dispatchChatUpdateEvent]
+  );
 
   const openChat = async (chatIdOrName: string | number) => {
     if (!token) return;
