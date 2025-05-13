@@ -1,3 +1,9 @@
 {
-  "cSpell.words": ["amazoncorretto", "catuser", "meowsenger"]
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "editor.formatOnPaste": true,
+  "cSpell.words": ["amazoncorretto", "catuser", "meowsenger"],
+  "github.copilot.chat.agent.thinkingTool": true,
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true
 }
