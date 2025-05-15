@@ -9,6 +9,7 @@ import {
 } from "@heroui/dropdown";
 import { Button } from "@heroui/button";
 import { useToast } from "@/contexts/toast-context";
+import { useLanguage } from "@/contexts/language-context";
 import {
   FiMoreVertical,
   FiCopy,
@@ -38,15 +39,16 @@ export const MessageMenu = ({
   onForward,
 }: MessageMenuProps) => {
   const { showToast } = useToast();
+  const { t } = useLanguage();
 
   const handleCopy = () => {
     navigator.clipboard
       .writeText(messageContent)
       .then(() => {
-        showToast("Message copied to clipboard", "success");
+        showToast(t("message_copied"), "success");
       })
       .catch(() => {
-        showToast("Failed to copy message", "error");
+        showToast(t("failed_to_copy"), "error");
       });
   };
 
@@ -62,28 +64,28 @@ export const MessageMenu = ({
           isIconOnly
           size="sm"
           className="text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-full"
-          aria-label="Message options"
+          aria-label={t("message_options")}
         >
           <FiMoreVertical size={16} />
         </Button>
       </DropdownTrigger>
-      <DropdownMenu aria-label="Message actions">
+      <DropdownMenu aria-label={t("message_actions")}>
         <DropdownItem key="copy" startContent={<FiCopy />} onPress={handleCopy}>
-          Copy
+          {t("copy")}
         </DropdownItem>
         <DropdownItem
           key="reply"
           startContent={<FiMessageSquare />}
           onPress={onReply}
         >
-          Reply
+          {t("reply")}
         </DropdownItem>
         <DropdownItem
           key="forward"
           startContent={<FiCornerUpRight />}
           onPress={onForward}
         >
-          Forward
+          {t("forward")}
         </DropdownItem>
         {canModify ? (
           <>
@@ -93,7 +95,7 @@ export const MessageMenu = ({
               onPress={onEdit}
               isDisabled={!isOwn} // Only owner can edit
             >
-              Edit
+              {t("edit")}
             </DropdownItem>
             <DropdownItem
               key="delete"
@@ -102,7 +104,7 @@ export const MessageMenu = ({
               color="danger"
               onPress={onDelete}
             >
-              Delete
+              {t("delete")}
             </DropdownItem>
           </>
         ) : null}

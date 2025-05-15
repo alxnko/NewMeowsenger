@@ -8,40 +8,43 @@ import Link from "next/link";
 import { ROUTES } from "@/config/site";
 import Container from "@/components/elements/container";
 import { ProtectedRoute } from "@/components/elements/protected-route";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function Home() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <ProtectedRoute authRedirect={true}>
       <Container>
         <div className="inline-block max-w-xl text-center justify-center">
-          <span className={title()}>use </span>
+          <span className={title()}>{t("home_title").split(" ")[0] + " "}</span>
           <span className={title({ color: "green" })}>meowsenger</span>
           <br />
-          <span className={title()}>for messaging</span>
+          <span className={title()}>
+            {t("home_title").split(" ").slice(2).join(" ")}
+          </span>
           <div className={subtitle({ class: "mt-4" })}>
-            beautiful, fast <br />
-            and modern messenger
+            {t("home_subtitle")}
           </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-2 items-center">
           <Snippet hideCopyButton hideSymbol variant="bordered">
             <span>
-              start messaging by{" "}
+              {t("start_messaging")}{" "}
               <Button
                 as={Link}
                 href={ROUTES.signup}
                 variant="flat"
                 color="danger"
               >
-                signing up
+                {t("signing_up")}
               </Button>
             </span>
           </Snippet>
           <div className="text-sm text-neutral-500">
-            already have an account?{" "}
+            {t("already_have_account")}{" "}
             <Button
               size="sm"
               as={Link}
@@ -49,7 +52,7 @@ export default function Home() {
               variant="flat"
               color="success"
             >
-              login
+              {t("login")}
             </Button>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { useChat } from "@/contexts/chat-context";
 import clsx from "clsx";
 import { MessageMenu } from "@/components/elements/message-menu";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 
 const messageStyles = tv({
   base: "rounded-lg p-3 max-w-[80%] lowercase relative",
@@ -107,6 +108,8 @@ function useMessageInfo(replyTo?: number, content?: string, sender?: string) {
   };
 }
 
+import { translateSystemMessage } from "@/utils/message-utils";
+
 export const Message = memo(
   ({
     content,
@@ -125,6 +128,7 @@ export const Message = memo(
   }: MessageProps) => {
     const { editMessage, deleteMessage } = useChat();
     const { isAdmin } = useAuth();
+    const { t } = useLanguage();
 
     // Use the custom hook to get message data
     const { replyMessage, replyAuthor, messageId } = useMessageInfo(
@@ -170,14 +174,14 @@ export const Message = memo(
         <div className={replyStyles({ isOwn })}>
           <span className="font-medium text-xs">
             {replyAuthor === sender
-              ? "Replying to self"
-              : `Reply to ${replyAuthor}`}
+              ? t("replying_to_self")
+              : t("reply_to_user", { user: replyAuthor })}
             :
           </span>
           <div className="text-xs opacity-75 truncate">{replyMessage}</div>
         </div>
       );
-    }, [replyTo, replyMessage, isSystem, isOwn, replyAuthor, sender]);
+    }, [replyTo, replyMessage, isSystem, isOwn, replyAuthor, sender, t]);
 
     const senderComponent = useMemo(() => {
       if (isOwn || isSystem) return null;
@@ -238,7 +242,11 @@ export const Message = memo(
           {senderComponent}
 
           <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
-            {content}
+            {isDeleted
+              ? t("message_deleted")
+              : isSystem
+                ? translateSystemMessage(content, t)
+                : content}
           </p>
 
           {!isSystem && (
@@ -250,7 +258,9 @@ export const Message = memo(
             >
               <span className="text-[10px]">{formattedTime}</span>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                {isEdited && !isDeleted && <span title="Edited">(edited)</span>}
+                {isEdited && !isDeleted && (
+                  <span title={t("edited")}>{t("edited_short")}</span>
+                )}
               </div>
             </div>
           )}

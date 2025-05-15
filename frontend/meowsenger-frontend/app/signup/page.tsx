@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/elements/protected-route";
 
 export default function SignupPage() {
   const { register, loading, error, validationErrors, clearErrors } = useAuth();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -47,9 +49,9 @@ export default function SignupPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-xl shadow-lg">
           <div className="text-center">
-            <h1 className="text-3xl font-bold">Sign Up for Meowsenger</h1>
+            <h1 className="text-3xl font-bold">{t("signup")}</h1>
             <p className="mt-2 text-muted-foreground">
-              Create your account to start messaging
+              {t("create_account_to_start_messaging")}
             </p>
           </div>
 
@@ -63,7 +65,7 @@ export default function SignupPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="username" className="block text-sm font-medium">
-                  Username
+                  {t("username")}
                 </label>
                 <input
                   id="username"
@@ -77,7 +79,7 @@ export default function SignupPage() {
                       ? "border-red-500"
                       : "border-muted"
                   } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder="Choose a username"
+                  placeholder={t("choose_username")}
                 />
                 {getFieldError("username") && (
                   <p className="mt-1 text-sm text-red-500">
@@ -88,7 +90,7 @@ export default function SignupPage() {
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium">
-                  Password
+                  {t("password")}
                 </label>
                 <input
                   id="password"
@@ -102,7 +104,7 @@ export default function SignupPage() {
                       ? "border-red-500"
                       : "border-muted"
                   } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder="Create a password"
+                  placeholder={t("create_password")}
                 />
                 {getFieldError("password") && (
                   <p className="mt-1 text-sm text-red-500">
@@ -116,7 +118,7 @@ export default function SignupPage() {
                   htmlFor="password2"
                   className="block text-sm font-medium"
                 >
-                  Confirm Password
+                  {t("confirm_password")}
                 </label>
                 <input
                   id="password2"
@@ -130,7 +132,7 @@ export default function SignupPage() {
                       ? "border-red-500"
                       : "border-muted"
                   } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder="Confirm your password"
+                  placeholder={t("confirm_your_password")}
                 />
                 {getFieldError("password2") && (
                   <p className="mt-1 text-sm text-red-500">
@@ -145,14 +147,14 @@ export default function SignupPage() {
               disabled={loading}
               className="w-full px-4 py-2 text-white bg-primary rounded-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
             >
-              {loading ? "Creating account..." : "Sign up"}
+              {loading ? t("creating_account") : t("sign_up")}
             </button>
 
             <div className="text-center mt-4">
               <p className="text-muted-foreground">
-                Already have an account?{" "}
+                {t("already_have_account")}{" "}
                 <Link href="/login" className="text-primary hover:underline">
-                  Log in
+                  {t("login_here")}
                 </Link>
               </p>
             </div>

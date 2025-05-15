@@ -8,11 +8,13 @@ import NavMenu from "./menu";
 import { useDisclosure } from "@heroui/modal";
 import { useAuth } from "@/contexts/auth-context";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function NavBar() {
   const { isOpen, onOpen, onClose, onOpenChange } = useDisclosure();
   const { isLoggedIn } = useAuth();
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   // Hide the navbar when the URL contains /chats/group or /chats/user
   const shouldHideNavBar =
@@ -47,7 +49,7 @@ export default function NavBar() {
                 className="m-1 w-24 rounded-full"
                 variant="light"
               >
-                login
+                {t("login")}
               </Button>
               <LogoButton />
               <Button
@@ -56,7 +58,7 @@ export default function NavBar() {
                 className="m-1 w-24 rounded-full"
                 variant="light"
               >
-                signup
+                {t("signup")}
               </Button>
             </>
           ) : (
@@ -67,7 +69,7 @@ export default function NavBar() {
                 className="m-1 w-24 rounded-full"
                 variant="light"
               >
-                chats
+                {t("chats")}
               </Button>
               <LogoButton />
               <Button
@@ -76,7 +78,7 @@ export default function NavBar() {
                 className="m-1 w-24 rounded-full"
                 variant="light"
               >
-                settings
+                {t("settings")}
               </Button>
             </>
           )}

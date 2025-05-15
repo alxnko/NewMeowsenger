@@ -12,6 +12,7 @@ import { Input } from "@/components/elements/input";
 import { Button } from "@/components/elements/button";
 import { ChatMessage, useChat } from "@/contexts/chat-context";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import clsx from "clsx";
 import { BiSolidSend } from "react-icons/bi";
 import { FiX } from "react-icons/fi";
@@ -140,6 +141,7 @@ export const MessageList = memo(
       hasMoreMessages,
       editMessage: updateMessage,
     } = useChat();
+    const { t } = useLanguage();
     const typingTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
     const lastTypingTimestamp = useRef<number>(0);
     const inputChangeDebounce = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -553,17 +555,21 @@ export const MessageList = memo(
           {currentlyTypingUsers.length === 1 ? (
             <>
               <div className="flex mr-2">{dotIndicator}</div>
-              <span>{currentlyTypingUsers[0].username} is typing...</span>
+              <span>
+                {t("is_typing", { user: currentlyTypingUsers[0].username })}
+              </span>
             </>
           ) : (
             <>
               <div className="flex mr-2">{dotIndicator}</div>
-              <span>{currentlyTypingUsers.length} people are typing...</span>
+              <span>
+                {t("are_typing", { count: currentlyTypingUsers.length })}
+              </span>
             </>
           )}
         </div>
       );
-    }, [currentlyTypingUsers]);
+    }, [currentlyTypingUsers, t]);
 
     // Edit indicator component
     const editIndicator = useMemo(() => {
@@ -571,10 +577,10 @@ export const MessageList = memo(
 
       return (
         <div className={editIndicatorStyles()}>
-          <span>editing message: "{editMessage.content}"</span>
+          <span>{t("editing_message", { message: editMessage.content })}</span>
         </div>
       );
-    }, [editMessage]);
+    }, [editMessage, t]);
 
     // Memoize scroll button click handler
     const handleScrollButtonClick = useCallback(
@@ -589,10 +595,10 @@ export const MessageList = memo(
       return (
         <div className={loadingIndicatorStyles()}>
           <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary mx-auto mr-2"></div>
-          <span>loading older messages...</span>
+          <span>{t("loading_older_messages")}</span>
         </div>
       );
-    }, [isLoadingOlderMessages]);
+    }, [isLoadingOlderMessages, t]);
 
     return (
       <div className={messageListStyles({ className })}>
@@ -617,7 +623,7 @@ export const MessageList = memo(
                   onClick={handleLoadMoreMessages}
                   disabled={isLoadingOlderMessages}
                 >
-                  load older messages
+                  {t("load_older_messages")}
                 </Button>
               </div>
             )}
@@ -635,7 +641,7 @@ export const MessageList = memo(
             ))
           ) : (
             <div className="h-full flex items-center justify-center text-neutral-500 dark:text-neutral-400 lowercase">
-              no messages yet. start the conversation!
+              {t("no_messages")}
             </div>
           )}
 
@@ -648,7 +654,7 @@ export const MessageList = memo(
                 replyTo || editMessage ? "bottom-32" : "bottom-16"
               )}
               isIconOnly
-              aria-label="Scroll to bottom"
+              aria-label={t("scroll_to_bottom")}
               onClick={handleScrollButtonClick}
               size="sm"
             >
@@ -671,7 +677,10 @@ export const MessageList = memo(
           {replyTo && (
             <div className="py-2 border-t dark:border-neutral-800 flex items-center justify-between">
               <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                Replying to {replyTo.sender.name}: "{replyTo.content}"
+                {t("replying_to", {
+                  user: replyTo.sender.name,
+                  message: replyTo.content,
+                })}
               </div>
               <Button variant="ghost" size="sm" onClick={cancelReply}>
                 <FiX />
@@ -682,7 +691,7 @@ export const MessageList = memo(
           {editMessage && (
             <div className="py-2 border-t dark:border-neutral-800 flex items-center justify-between">
               <div className="text-sm text-amber-600 dark:text-amber-400">
-                Editing message: "{editMessage.content}"
+                {t("editing_message", { message: editMessage.content })}
               </div>
               <Button variant="ghost" size="sm" onClick={cancelEdit}>
                 <FiX />
@@ -696,13 +705,13 @@ export const MessageList = memo(
               onChange={handleInputChange}
               placeholder={
                 editMessage
-                  ? "edit your message..."
+                  ? t("edit_your_message")
                   : isConnected
-                    ? "type a message..."
-                    : "reconnecting..."
+                    ? t("type_a_message")
+                    : t("reconnecting")
               }
               className="flex-1"
-              aria-label="Message input"
+              aria-label={t("message_input")}
               disabled={!isConnected}
               autoFocus={!!editMessage}
             />
@@ -711,6 +720,7 @@ export const MessageList = memo(
               className="min-w-0"
               isIconOnly
               disabled={!newMessage.trim() || !isConnected}
+              aria-label={t("send_message")}
             >
               <BiSolidSend />
             </Button>

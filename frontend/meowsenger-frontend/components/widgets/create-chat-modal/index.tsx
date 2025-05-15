@@ -8,6 +8,7 @@ import {
 } from "@heroui/modal";
 import { Input } from "@/components/elements/input";
 import { Button } from "@/components/elements/button";
+import { useLanguage } from "@/contexts/language-context";
 
 export interface CreateChatModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const CreateChatModal = ({
   const [currentUserInput, setCurrentUserInput] = useState("");
   const [members, setMembers] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const { t } = useLanguage();
 
   const addMember = () => {
     const trimmedUser = currentUserInput.trim();
@@ -90,12 +92,14 @@ export const CreateChatModal = ({
   return (
     <Modal isOpen={isOpen} onOpenChange={handleClose}>
       <ModalContent>
-        <ModalHeader className="lowercase">create new chat</ModalHeader>
+        <ModalHeader className="lowercase">{t("create_new_chat")}</ModalHeader>
         <ModalBody>
           <div className="flex flex-col gap-4">
             {onCreateGroupChat && (
               <div className="flex items-center gap-2">
-                <span className="text-sm lowercase">create group chat</span>
+                <span className="text-sm lowercase">
+                  {t("create_group_chat")}
+                </span>
                 <div className="ml-auto">
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -113,15 +117,15 @@ export const CreateChatModal = ({
             {isGroup ? (
               <>
                 <Input
-                  label="group name"
+                  label={t("group_name")}
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
-                  placeholder="enter group name"
+                  placeholder={t("enter_group_name")}
                 />
 
                 <div className="flex flex-col gap-2">
                   <label className="text-sm text-neutral-500 dark:text-neutral-400 lowercase">
-                    group members
+                    {t("group_members")}
                   </label>
 
                   <div className="flex flex-wrap gap-2">
@@ -145,7 +149,7 @@ export const CreateChatModal = ({
                     <Input
                       value={currentUserInput}
                       onChange={(e) => setCurrentUserInput(e.target.value)}
-                      placeholder="type a username and press enter or add"
+                      placeholder={t("type_username_and_press_enter")}
                       onKeyDown={handleKeyDown}
                       className="flex-1"
                     />
@@ -155,34 +159,34 @@ export const CreateChatModal = ({
                       disabled={!currentUserInput.trim()}
                       className="h-auto"
                     >
-                      add
+                      {t("add")}
                     </Button>
                   </div>
 
                   {error && (
-                    <p className="text-sm text-red-500 mt-1">{error}</p>
+                    <p className="text-sm text-red-500 mt-1">{t(error)}</p>
                   )}
                 </div>
               </>
             ) : (
               <Input
-                label="username"
+                label={t("username")}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="enter username"
+                placeholder={t("enter_username")}
               />
             )}
           </div>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" color="danger" onPress={handleClose}>
-            cancel
+            {t("cancel")}
           </Button>
           <Button
             onPress={handleSubmit}
             disabled={isGroup ? !groupName || members.length === 0 : !username}
           >
-            create
+            {t("create")}
           </Button>
         </ModalFooter>
       </ModalContent>

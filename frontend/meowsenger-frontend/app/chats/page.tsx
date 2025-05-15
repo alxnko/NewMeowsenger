@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useChat } from "@/contexts/chat-context";
+import { useLanguage } from "@/contexts/language-context";
 import { ChatList } from "@/components/widgets/chat-list";
 import { Button } from "@/components/elements/button";
 import CreateChatModal from "@/components/widgets/create-chat-modal";
@@ -22,6 +23,7 @@ export default function ChatsPage() {
     openChat,
     createGroup,
   } = useChat();
+  const { t } = useLanguage();
   const [filteredChats, setFilteredChats] = useState(chats);
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,7 +178,7 @@ export default function ChatsPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            loading chats...
+            {t("loading_chats")}
           </p>
         </div>
       </div>
@@ -188,11 +190,11 @@ export default function ChatsPage() {
       <div className="flex flex-col h-screen">
         <div className="flex justify-between items-center p-4 border-b dark:border-neutral-800">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-medium">chats</h1>
+            <h1 className="text-2xl font-medium">{t("chats")}</h1>
             <WebSocketStatus size="sm" />
           </div>
           <Button onClick={handleCreateChat} variant="flat" size="sm">
-            new chat
+            {t("new_chat")}
           </Button>
         </div>
 

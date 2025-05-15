@@ -182,12 +182,12 @@ export default function GroupChatPage() {
   };
 
   if (!user) {
-    return <div className="p-4">Please log in to view this chat.</div>;
+    return <div className="p-4">{t("please_log_in")}</div>;
   }
 
   const groupHeaderContent = useMemo(() => {
     if (!currentChat) return null;
-
+    const membersCount = currentChat.users?.length || 0;
     return (
       <div>
         <div className="flex items-center">
@@ -203,11 +203,10 @@ export default function GroupChatPage() {
             size="sm"
             className="ml-2 text-xs h-6 px-1"
           >
-            {currentChat.users?.length === 1
-              ? "1 member"
-              : `${currentChat.users?.length || 0} members`}
+            {membersCount === 1
+              ? t("one_member")
+              : `${membersCount} ${t("members")}`}
           </Button>
-
           {isAdmin && (
             <Button
               onClick={() => setShowSettingsModal(true)}
@@ -215,13 +214,12 @@ export default function GroupChatPage() {
               size="sm"
               isIconOnly
               className="ml-1 text-xs h-6"
-              title="Group Settings"
+              title={t("group_settings")}
             >
               <FiSettings />
             </Button>
           )}
         </div>
-
         <p className="text-sm text-muted-foreground lowercase">
           {currentChat.desc}
         </p>
@@ -234,7 +232,7 @@ export default function GroupChatPage() {
         >
           <ModalContent>
             <ModalHeader className="lowercase">
-              group members ({currentChat.users?.length || 0})
+              {`${membersCount} ${t("members")}`}
             </ModalHeader>
             <ModalBody className="max-h-[60vh] overflow-y-auto">
               <div className="space-y-3">
@@ -278,7 +276,7 @@ export default function GroupChatPage() {
                                   }
                                   className="lowercase text-amber-500 bg-amber-100 dark:bg-amber-900/20"
                                 >
-                                  owner
+                                  {t("owner")}
                                 </Chip>
                               )}
                               {!isOwner && isMemberAdmin && (
@@ -291,7 +289,7 @@ export default function GroupChatPage() {
                                   }
                                   className="lowercase text-yellow-500 bg-yellow-100 dark:bg-yellow-900/20"
                                 >
-                                  admin
+                                  {t("admin")}
                                 </Chip>
                               )}
                             </div>
@@ -307,7 +305,7 @@ export default function GroupChatPage() {
                                 color="success"
                                 className="ml-2 lowercase"
                               >
-                                you
+                                {t("you")}
                               </Chip>
                             )}
                           </div>
@@ -328,7 +326,7 @@ export default function GroupChatPage() {
                                 <FiMoreVertical size={16} />
                               </Button>
                             </DropdownTrigger>
-                            <DropdownMenu aria-label="Member actions">
+                            <DropdownMenu aria-label={t("member_actions")}>
                               <DropdownItem
                                 key="remove"
                                 className="text-danger lowercase"
@@ -342,7 +340,7 @@ export default function GroupChatPage() {
                                   openUserActionModal("remove", member.username)
                                 }
                               >
-                                remove from group
+                                {t("remove_from_group")}
                               </DropdownItem>
 
                               {isMemberAdmin ? (
@@ -362,7 +360,7 @@ export default function GroupChatPage() {
                                     )
                                   }
                                 >
-                                  remove admin rights
+                                  {t("remove_admin_rights")}
                                 </DropdownItem>
                               ) : (
                                 <DropdownItem
@@ -381,7 +379,7 @@ export default function GroupChatPage() {
                                     )
                                   }
                                 >
-                                  make admin
+                                  {t("make_admin")}
                                 </DropdownItem>
                               )}
                             </DropdownMenu>
@@ -400,7 +398,7 @@ export default function GroupChatPage() {
                   onClick={() => openUserActionModal("add")}
                   startContent={<FiUserPlus />}
                 >
-                  add user
+                  {t("add_user")}
                 </Button>
               </ModalFooter>
             )}
@@ -413,31 +411,33 @@ export default function GroupChatPage() {
           size="md"
         >
           <ModalContent>
-            <ModalHeader className="lowercase">group settings</ModalHeader>
+            <ModalHeader className="lowercase">
+              {t("group_settings")}
+            </ModalHeader>
             <ModalBody>
               <div className="space-y-4">
                 <div>
                   <Input
-                    label="group name"
+                    label={t("group_name")}
                     value={groupName}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setGroupName(e.target.value)
                     }
-                    placeholder="Enter group name"
+                    placeholder={t("enter_group_name")}
                     startContent={<FiEdit />}
                   />
                 </div>
 
                 <div>
                   <div className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 lowercase">
-                    group description
+                    {t("group_description")}
                   </div>
                   <textarea
                     value={groupDescription}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                       setGroupDescription(e.target.value)
                     }
-                    placeholder="Enter group description"
+                    placeholder={t("enter_group_description")}
                     className="w-full p-2 text-sm rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 lowercase resize-y min-h-[80px]"
                   />
                 </div>
@@ -449,15 +449,15 @@ export default function GroupChatPage() {
                 color="danger"
                 onPress={() => setShowSettingsModal(false)}
               >
-                cancel
+                {t("cancel")}
               </Button>
               <Button
                 color="success"
                 onPress={handleSaveSettings}
                 isLoading={settingsLoading}
-                isDisabled={!groupName.trim()}
+                disabled={!groupName.trim()}
               >
-                save changes
+                {t("save_changes")}
               </Button>
             </ModalFooter>
           </ModalContent>
@@ -471,32 +471,32 @@ export default function GroupChatPage() {
           <ModalContent>
             <ModalHeader className="lowercase">
               {userActionType === "add"
-                ? "Add User"
+                ? t("add_user")
                 : userActionType === "remove"
-                  ? "Remove User"
+                  ? t("remove_user")
                   : userActionType === "promote"
-                    ? "Make Admin"
-                    : "Remove Admin"}
+                    ? t("make_admin")
+                    : t("remove_admin")}
             </ModalHeader>
             <ModalBody>
               {userActionType === "add" ? (
                 <Input
-                  label="username"
+                  label={t("username")}
                   value={newUsername}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setNewUsername(e.target.value)
                   }
-                  placeholder="Enter username to add"
+                  placeholder={t("enter_username_to_add")}
                   startContent={<FiUser />}
                 />
               ) : (
                 <p className="text-center py-2">
-                  Are you sure you want to{" "}
+                  {t("are_you_sure")}{" "}
                   {userActionType === "remove"
-                    ? "remove"
+                    ? t("remove")
                     : userActionType === "promote"
-                      ? "make admin"
-                      : "remove admin status from"}{" "}
+                      ? t("make_admin")
+                      : t("remove_admin_status_from")}{" "}
                   <span className="font-bold">{selectedUser}</span>?
                 </p>
               )}
@@ -507,7 +507,7 @@ export default function GroupChatPage() {
                 color="danger"
                 onPress={() => setShowUserActionModal(false)}
               >
-                cancel
+                {t("cancel")}
               </Button>
               <Button
                 color={
@@ -517,9 +517,9 @@ export default function GroupChatPage() {
                 }
                 onPress={handleUserAction}
                 isLoading={settingsLoading}
-                isDisabled={userActionType === "add" && !newUsername.trim()}
+                disabled={userActionType === "add" && !newUsername.trim()}
               >
-                confirm
+                {t("confirm")}
               </Button>
             </ModalFooter>
           </ModalContent>
@@ -539,6 +539,7 @@ export default function GroupChatPage() {
     settingsLoading,
     isAdmin,
     user,
+    t,
   ]);
 
   return (

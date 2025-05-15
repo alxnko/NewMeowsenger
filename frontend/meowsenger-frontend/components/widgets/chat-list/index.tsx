@@ -5,6 +5,7 @@ import { tv } from "tailwind-variants";
 import ChatItem from "@/components/elements/chat-item";
 import { Input } from "@/components/elements/input";
 import { ChatBlock } from "@/contexts/chat-context";
+import { useLanguage } from "@/contexts/language-context";
 
 const chatListStyles = tv({
   base: "flex flex-col h-full",
@@ -31,17 +32,27 @@ interface OptimizedChatItemProps {
   isActive: boolean;
 }
 
+// Import the utility function for translating system messages
+import { translateSystemMessage } from "@/utils/message-utils";
+
 // Memoized chat item component to prevent unnecessary re-renders
 const OptimizedChatItem: FC<OptimizedChatItemProps> = memo(
   ({ chat, isActive }) => {
+    const { t } = useLanguage();
+    
     // Format timestamp from lastUpdate string
     const lastUpdate = chat.lastUpdate ? new Date(chat.lastUpdate) : undefined;
 
     // Extract text from lastMessage object
-    const lastMessageText =
+    let lastMessageText =
       typeof chat.lastMessage === "string"
         ? chat.lastMessage
         : chat.lastMessage?.text || "";
+
+    // If last message is system, translate it
+    if (chat.lastMessage?.isSystem || chat.lastMessage?.author === "System") {
+      lastMessageText = translateSystemMessage(lastMessageText, t);
+    }
 
     return (
       <ChatItem
@@ -72,6 +83,8 @@ const OptimizedChatItem: FC<OptimizedChatItemProps> = memo(
 
 export const ChatList = memo(
   ({ chats, activeChat, onSearch, className }: ChatListProps) => {
+    const { t } = useLanguage();
+
     const handleSearchChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         if (onSearch) {
@@ -86,7 +99,7 @@ export const ChatList = memo(
         <div className="p-3 border-b dark:border-neutral-800">
           <Input
             type="search"
-            placeholder="search chats"
+            placeholder={t("search_chats")}
             size="sm"
             onChange={handleSearchChange}
             startContent={
@@ -140,7 +153,7 @@ export const ChatList = memo(
             })
           ) : (
             <div className="p-4 text-center text-neutral-500 dark:text-neutral-400 lowercase">
-              no chats available
+              {t("no_chats_available")}
             </div>
           )}
         </div>

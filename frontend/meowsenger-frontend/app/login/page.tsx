@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/elements/protected-route";
 
 export default function LoginPage() {
   const { login, loading, error, validationErrors } = useAuth();
+  const { t } = useLanguage();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
@@ -34,9 +36,9 @@ export default function LoginPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-xl shadow-lg">
           <div className="text-center">
-            <h1 className="text-3xl font-bold">Log in to Meowsenger</h1>
+            <h1 className="text-3xl font-bold">{t("login_to_meowsenger")}</h1>
             <p className="mt-2 text-muted-foreground">
-              Welcome back! Enter your credentials to continue
+              {t("welcome_back_enter_credentials")}
             </p>
           </div>
 
@@ -50,7 +52,7 @@ export default function LoginPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="username" className="block text-sm font-medium">
-                  Username
+                  {t("username")}
                 </label>
                 <input
                   id="username"
@@ -64,7 +66,7 @@ export default function LoginPage() {
                       ? "border-red-500"
                       : "border-muted"
                   } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder="Your username"
+                  placeholder={t("your_username")}
                 />
                 {getFieldError("username") && (
                   <p className="mt-1 text-sm text-red-500">
@@ -75,7 +77,7 @@ export default function LoginPage() {
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium">
-                  Password
+                  {t("password")}
                 </label>
                 <input
                   id="password"
@@ -89,7 +91,7 @@ export default function LoginPage() {
                       ? "border-red-500"
                       : "border-muted"
                   } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder="Your password"
+                  placeholder={t("your_password")}
                 />
                 {getFieldError("password") && (
                   <p className="mt-1 text-sm text-red-500">
@@ -104,14 +106,14 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full px-4 py-2 text-white bg-primary rounded-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
             >
-              {loading ? "Logging in..." : "Log in"}
+              {loading ? t("logging_in") : t("log_in")}
             </button>
 
             <div className="text-center mt-4">
               <p className="text-muted-foreground">
-                Don't have an account?{" "}
+                {t("dont_have_account")}{" "}
                 <Link href="/signup" className="text-primary hover:underline">
-                  Sign up
+                  {t("sign_up")}
                 </Link>
               </p>
             </div>
