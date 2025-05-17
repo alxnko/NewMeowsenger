@@ -11,7 +11,9 @@ import { useLanguage } from "@/contexts/language-context";
 import LanguageSelector from "@/components/widgets/language-selector";
 import { useTheme } from "next-themes";
 import { FaSun, FaMoon } from "react-icons/fa";
+import { FiAlertTriangle } from "react-icons/fi";
 import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/contexts/toast-context";
 
 const LOCAL_STORAGE_KEY = "meowsenger_cookie_consent";
 
@@ -19,7 +21,39 @@ export const CookieConsent: React.FC = () => {
   const { t } = useLanguage();
   const { theme, setTheme } = useTheme();
   const { isLoggedIn } = useAuth();
+  const { showToast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
+  const [endpointsAvailable, setEndpointsAvailable] = useState(true);
+
+  useEffect(() => {
+    // Check if auth endpoints are available
+    const checkEndpoints = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/health/`
+        );
+        if (!response.ok) {
+          setEndpointsAvailable(false);
+          showToast(
+            "Authentication server unavailable. Some features may not work correctly.",
+            "error"
+          );
+        }
+      } catch (error) {
+        console.error("Failed to check API availability:", error);
+        setEndpointsAvailable(false);
+        showToast(
+          "Authentication server unavailable. Some features may not work correctly.",
+          "error"
+        );
+      }
+    };
+
+    // Only check endpoints if not logged in
+    if (!isLoggedIn) {
+      checkEndpoints();
+    }
+  }, [isLoggedIn, showToast]);
 
   useEffect(() => {
     // Only show for non-logged in users
@@ -64,6 +98,16 @@ export const CookieConsent: React.FC = () => {
           </h3>
         </ModalHeader>
         <ModalBody>
+          {!endpointsAvailable && (
+            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-4 flex items-center text-sm">
+              <FiAlertTriangle className="text-red-500 mr-2" />
+              <p className="text-red-600 dark:text-red-400">
+                authentication server unavailable. secure storage may not work
+                correctly.
+              </p>
+            </div>
+          )}
+
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">
             {t("cookie_consent_description")}
           </p>

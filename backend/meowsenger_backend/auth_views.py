@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, UserSerializer, LoginSerializer
+from django.conf import settings
 
 
 class RegisterView(generics.CreateAPIView):
@@ -122,3 +123,82 @@ class UserPreferencesView(APIView):
                 "theme": serializer.data.get("theme"),
             }
         )
+
+
+class SetTokenCookieView(APIView):
+    """
+    Sets a secure HTTP-only cookie containing the authentication token.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        token = request.data.get("token")
+        if not token:
+            return Response(
+                {"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate that the token exists in the database
+        try:
+            Token.objects.get(key=token)
+        except Token.DoesNotExist:
+            return Response(
+                {"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Set the token as a secure HTTP-only cookie
+        response = Response({"status": "Token cookie set"})
+        max_age = 60 * 60 * 24 * 30  # 30 days
+
+        # Set secure properties for the cookie
+        response.set_cookie(
+            "meowsenger_auth_token",
+            token,
+            max_age=max_age,
+            httponly=True,  # Not accessible via JavaScript
+            samesite="Lax",  # Helps prevent CSRF
+            secure=settings.SESSION_COOKIE_SECURE,  # True in production
+            path="/",
+        )
+
+        return response
+
+
+class ClearTokenCookieView(APIView):
+    """
+    Clears the authentication token cookie.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        response = Response({"status": "Token cookie cleared"})
+        response.delete_cookie("meowsenger_auth_token", path="/")
+        return response
+
+
+class GetTokenFromCookieView(APIView):
+    """
+    Returns the token from the HTTP-only cookie.
+    This allows the frontend to initialize with a token from cookie.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        token = request.COOKIES.get("meowsenger_auth_token")
+
+        # If token exists, validate it exists in the database
+        if token:
+            try:
+                Token.objects.get(key=token)
+            except Token.DoesNotExist:
+                # Invalid token, clear the cookie
+                response = Response({"token": None})
+                response.delete_cookie("meowsenger_auth_token", path="/")
+                return response
+
+            return Response({"token": token})
+
+        return Response({"token": None})

@@ -23,7 +23,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .auth_views import RegisterView, LoginView, LogoutView, UserPreferencesView
+from .auth_views import (
+    RegisterView,
+    LoginView,
+    LogoutView,
+    UserPreferencesView,
+    SetTokenCookieView,
+    ClearTokenCookieView,
+    GetTokenFromCookieView,
+)
 from . import chat_views
 
 
@@ -53,7 +61,19 @@ urlpatterns = [
     path("api/login/", LoginView.as_view(), name="login"),
     path("api/logout/", LogoutView.as_view(), name="logout"),
     path("api/preferences/", UserPreferencesView.as_view(), name="user_preferences"),
-    # Chat endpoints
+    # Token cookie management
+    path("api/auth/set-cookie", SetTokenCookieView.as_view(), name="set-token-cookie"),
+    path(
+        "api/auth/clear-cookie",
+        ClearTokenCookieView.as_view(),
+        name="clear-token-cookie",
+    ),
+    path(
+        "api/auth/get-token",
+        GetTokenFromCookieView.as_view(),
+        name="get-token-from-cookie",
+    ),
+    # Chat endpoints - updated to match actual function names
     path("api/c/get_chats", chat_views.get_chats, name="get_chats"),
     path("api/c/get_chat", chat_views.get_chat, name="get_chat"),
     path("api/c/create_group", chat_views.create_group, name="create_group"),
@@ -69,5 +89,10 @@ urlpatterns = [
         "api/c/get_older_messages",
         chat_views.get_older_messages,
         name="get_older_messages",
+    ),
+    path(
+        "api/c/update_group_settings",
+        chat_views.update_group_settings,
+        name="update_group_settings",
     ),
 ]

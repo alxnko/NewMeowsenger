@@ -1,5 +1,6 @@
 // API client for communicating with the backend
 import { ChatBlock, ChatDetails, ChatMessage } from "@/contexts/chat-context";
+import { getToken } from "./token-manager";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -53,7 +54,9 @@ export async function apiFetch<T = any>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, token } = options;
+  const { method = "GET", body } = options;
+  // Get token from options OR from in-memory storage if not provided
+  const token = options.token || getToken();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -61,7 +64,7 @@ export async function apiFetch<T = any>(
   };
 
   if (token) {
-    headers["Authorization"] = `Token ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const config: RequestInit = {
@@ -94,30 +97,47 @@ export async function apiFetch<T = any>(
       // Format error message with more details
       let errorMessage = `API error: ${response.status}`;
       if (errorData.detail) {
-        errorMessage = errorData.detail;
-      } else if (
-        typeof errorData === "object" &&
-        Object.keys(errorData).length > 0
-      ) {
-        // For form validation errors that might be returned as field:error objects
-        const errors = Object.entries(errorData)
-          .map(([field, messages]) => {
-            // Handle both string messages and array of messages
-            const messageText = Array.isArray(messages)
-              ? messages.join(", ")
-              : messages;
-            return `${field}: ${messageText}`;
-          })
-          .join("; ");
-        errorMessage = `Validation errors: ${errors}`;
+        errorMessage += ` - ${errorData.detail}`;
+      } else if (errorData.error) {
+        errorMessage += ` - ${errorData.error}`;
+      } else if (errorData.message) {
+        errorMessage += ` - ${errorData.message}`;
+      }
+
+      // For validation errors, format them in a more structured way
+      if (errorData.errors) {
+        const validationErrors: string[] = [];
+        Object.entries(errorData.errors).forEach(([field, messages]) => {
+          if (Array.isArray(messages)) {
+            messages.forEach((msg) =>
+              validationErrors.push(`${field}: ${msg}`)
+            );
+          } else if (typeof messages === "string") {
+            validationErrors.push(`${field}: ${messages}`);
+          }
+        });
+
+        if (validationErrors.length > 0) {
+          errorMessage = `Validation errors: ${validationErrors.join("; ")}`;
+        }
       }
 
       throw new Error(errorMessage);
     }
 
-    return (await response.json()) as T;
+    // Check if the response is empty or not JSON
+    const contentType = response.headers.get("content-type");
+    if (
+      response.status === 204 ||
+      !contentType ||
+      !contentType.includes("application/json")
+    ) {
+      return {} as T;
+    }
+
+    return await response.json();
   } catch (error) {
-    console.error("API request failed:", error);
+    console.error(`API error for ${endpoint}:`, error);
     throw error;
   }
 }

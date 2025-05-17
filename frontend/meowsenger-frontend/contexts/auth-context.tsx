@@ -8,6 +8,7 @@ import {
 import { useRouter } from "next/navigation";
 import { authApi, AuthResponse, AUTH_ERROR_EVENT } from "@/utils/api-client";
 import { useToast } from "./toast-context";
+import * as tokenManager from "@/utils/token-manager";
 
 export interface User {
   id: number;
@@ -64,17 +65,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { showToast } = useToast();
 
-  // Load user from localStorage on initial mount
+  // Initialize token manager and load user on initial mount
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("token");
+    const initAuth = async () => {
+      try {
+        // Use a timeout to avoid blocking app rendering
+        const timeoutPromise = new Promise<{
+          token: string | null;
+          user: any | null;
+        }>((_, reject) =>
+          setTimeout(() => reject(new Error("Auth init timeout")), 5000)
+        );
 
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-      setToken(storedToken);
-    }
+        // Race between normal init and timeout
+        const { token: storedToken, user: storedUser } = await Promise.race([
+          tokenManager.initTokenManager(),
+          timeoutPromise,
+        ]);
 
-    setLoading(false);
+        if (storedToken && storedUser) {
+          setUser(storedUser);
+          setToken(storedToken);
+          console.log("Auth restored from secure storage");
+        } else {
+          console.log("No stored auth found");
+        }
+      } catch (err) {
+        console.error("Error initializing auth:", err);
+        // Don't show error toast to user as this is background initialization
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   // Add event listener for auth token invalid events
@@ -120,8 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.user);
         setToken(response.token);
 
-        localStorage.setItem("user", JSON.stringify(response.user));
-        localStorage.setItem("token", response.token);
+        // Set token in secure token manager instead of localStorage
+        await tokenManager.setToken(response.token, response.user);
 
         router.push("/chats");
       } else {
@@ -174,8 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.user);
         setToken(response.token);
 
-        localStorage.setItem("user", JSON.stringify(response.user));
-        localStorage.setItem("token", response.token);
+        // Set token in secure token manager instead of localStorage
+        await tokenManager.setToken(response.token, response.user);
 
         router.push("/chats");
       } else {
@@ -217,13 +241,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         await authApi.logout(token);
       }
+
+      // Clear token from secure token manager instead of localStorage
+      await tokenManager.clearToken();
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
       setUser(null);
       setToken(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
       setLoading(false);
       router.push("/login");
     }
@@ -253,10 +278,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
-
   return context;
 };

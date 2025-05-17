@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from rest_framework.authentication import TokenAuthentication
+from rest_framework import exceptions
 
 # Load environment variables from .env.local file if it exists (for local development),
 # otherwise load from .env (for production/Docker)
@@ -189,14 +191,50 @@ CORS_ALLOW_HEADERS = [
 # Set trusted origins for CSRF
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
-# REST Framework configuration
+
+# Add this custom TokenAuthentication class that supports both schemes
+class BearerTokenAuthentication(TokenAuthentication):
+    """
+    Simple token based authentication using the format:
+
+    Authorization: Bearer <token>
+
+    Also supports the default format:
+    Authorization: Token <token>
+    """
+
+    keyword = "Bearer"
+
+    def authenticate(self, request):
+        auth = request.META.get("HTTP_AUTHORIZATION", "").split()
+
+        if not auth or auth[0].lower() not in ["token", "bearer"]:
+            return None
+
+        if len(auth) == 1:
+            msg = "Invalid token header. No credentials provided."
+            raise exceptions.AuthenticationFailed(msg)
+        elif len(auth) > 2:
+            msg = "Invalid token header. Token string should not contain spaces."
+            raise exceptions.AuthenticationFailed(msg)
+
+        # Get the token - no need to decode as it's already a string
+        token = auth[1]
+
+        return self.authenticate_credentials(token)
+
+
+# Update the REST_FRAMEWORK configuration to use the new authentication class
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
-    ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "meowsenger_backend.settings.BearerTokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
 }
 
 # Authentication backends
