@@ -28,7 +28,8 @@ const en = {
   save: "save",
   cancel: "cancel",
   username_placeholder: "enter username",
-  description_placeholder: "enter a short bio",  // Chat widget
+  description_placeholder: "enter a short bio",
+  // Chat widget
   back: "back",
   admin: "admin",
   tester: "tester",
@@ -81,17 +82,22 @@ const en = {
   // Message system and reply labels
   message_deleted: "this message was deleted",
   edited_short: "(edited)",
-  // Message menu  message_options: "message options",
+  forwarded_message: "forwarded message",
+  // Message menu
+  message_options: "message options",
   message_actions: "message actions",
   // System messages
   system_joined_group: "{user} joined the group",
   system_left_group: "{user} left the group",
-  system_created_group: "{user} created the group",  system_added_user: "{adder} added {added}",
+  system_created_group: "{user} created the group",
+  system_added_user: "{adder} added {added}",
   system_removed_user: "{remover} removed {removed}",
   user_made_admin: "{actor} made {target} an admin",
   user_removed_admin: "{actor} removed admin rights from {target}",
-  updated_group_settings: "{actor} updated group settings",
+  user_added_to_group: "{actor} added {target} to the group",
+  user_removed_from_group: "{actor} removed {target} from the group",
   user_changed_group_settings: "{actor} changed group settings",
+  updated_group_settings: "{actor} updated group settings",
   // Message list additions
   search_chats: "search chats...",
   no_chats_available: "no chats available",
@@ -108,16 +114,12 @@ const en = {
   group_settings: "group settings",
   group_description: "group description",
   members_count: "{count} members",
-  user_made_admin: "{actor} made {target} an admin",
-  user_removed_admin: "{actor} removed admin rights from {target}",
-  user_added_to_group: "{actor} added {target} to the group",  user_removed_from_group: "{actor} removed {target} from the group",  user_changed_group_settings: "{actor} changed group settings",
-  updated_group_settings: "{actor} updated group settings",
   you_were_removed_from_group: "You were removed from {chatName}",
   you_are_now_admin: "You are now an admin in this group",
   you_are_no_longer_admin: "You are no longer an admin in this group",
   two_members: "2 members",
   three_members: "3 members",
-  
+
   // Group management
   remove_from_group: "remove from group",
   remove_admin_rights: "remove admin rights",
@@ -129,7 +131,16 @@ const en = {
   confirm: "confirm",
   remove_admin_status_from: "remove admin status from {user}",
   save_changes: "save changes",
-  
+
+  // Forward message
+  forward_message: "forward message",
+  select_chats_to_forward: "select chats to forward to",
+  no_chats_found: "no chats found",
+  selected_chats: "{count} chats selected",
+  private_chat: "private chat",
+  group_chat: "group chat",
+  scroll_to_bottom: "scroll to bottom",
+
   // Time format
   less_than_x_seconds_ago: "just now",
   half_a_minute_ago: "30 seconds ago",

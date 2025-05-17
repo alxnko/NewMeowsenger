@@ -5,7 +5,12 @@ import clsx from "clsx";
 import { MessageMenu } from "@/components/elements/message-menu";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
-import { formatRelativeTime, translateSystemMessage } from "@/utils/message-utils";
+import {
+  formatRelativeTime,
+  translateSystemMessage,
+} from "@/utils/message-utils";
+import ForwardModal from "@/components/elements/forward-modal";
+import { FiEdit2, FiCornerUpRight } from "react-icons/fi";
 
 const messageStyles = tv({
   base: "rounded-lg p-3 max-w-[80%] lowercase relative",
@@ -23,12 +28,16 @@ const messageStyles = tv({
     isDeleted: {
       true: "bg-neutral-50 dark:bg-neutral-900/50 text-neutral-500 dark:text-neutral-400 italic",
     },
+    isForwarded: {
+      true: "border-l-4 border-green-400 dark:border-green-600",
+    },
   },
   defaultVariants: {
     isOwn: false,
     isPending: false,
     isSystem: false,
     isDeleted: false,
+    isForwarded: false,
   },
   compoundVariants: [
     {
@@ -44,17 +53,7 @@ const messageStyles = tv({
 });
 
 const replyStyles = tv({
-  base: "text-xs border-l-2 px-2 py-1 mb-2 truncate",
-  variants: {
-    isOwn: {
-      true: "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20",
-      false:
-        "border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/20",
-    },
-  },
-  defaultVariants: {
-    isOwn: false,
-  },
+  base: "text-xs border-green-400 dark:border-green-600 bg-green-50/60 dark:bg-green-900/30 border-l-2 px-3 py-2 mb-2 rounded-md shadow-sm relative overflow-hidden",
 });
 
 export interface MessageProps {
@@ -67,6 +66,7 @@ export interface MessageProps {
   isDeleted?: boolean;
   isEdited?: boolean;
   isSystem?: boolean;
+  isForwarded?: boolean;
   systemMessageType?: string;
   systemMessageParams?: Record<string, string | number>;
   replyTo?: number;
@@ -90,6 +90,7 @@ export const Message = memo(
     isDeleted = false,
     isEdited = false,
     isSystem = false,
+    isForwarded = false,
     systemMessageType,
     systemMessageParams,
     replyTo,
@@ -100,16 +101,25 @@ export const Message = memo(
     className,
     isRead = false,
   }: MessageProps) => {
-    const { editMessage, deleteMessage } = useChat();
+    // Add console log to debug forwarded message state
+    useEffect(() => {
+      if (isForwarded) {
+        console.log(`Message ${messageId} is forwarded:`, {
+          isForwarded,
+          content,
+        });
+      }
+    }, [isForwarded, messageId, content]);
+
+    const { editMessage, deleteMessage, sendMessage, forwardMessage } =
+      useChat();
     const { isAdmin } = useAuth();
     const { t } = useLanguage();
+    const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
 
     // Memoize the formatted time to avoid unnecessary calculations
     const formattedTime = useMemo(
-      () =>
-        timestamp
-          ? formatRelativeTime(timestamp, t)
-          : "",
+      () => (timestamp ? formatRelativeTime(timestamp, t) : ""),
       [timestamp, t]
     );
 
@@ -129,23 +139,40 @@ export const Message = memo(
     }, [deleteMessage, messageId]);
 
     const handleForward = useCallback(() => {
-      // Implement forwarding logic here
-      console.log("Forward message:", content);
-    }, [content]);
+      // Open the forward modal
+      setIsForwardModalOpen(true);
+    }, []);
+
+    // Handle forwarding to selected chats
+    const handleForwardToChats = useCallback(
+      async (chatIds: number[]) => {
+        if (!sendMessage) return;
+
+        // Create a promise for each chat to forward to
+        try {
+          // Use the chat context's forwardMessage function, which optimally handles forwarding
+          await forwardMessage(content, chatIds);
+        } catch (error) {
+          console.error("Error forwarding messages:", error);
+        }
+      },
+      [content, forwardMessage]
+    );
 
     // Optimized render with useMemo for complex parts
     const replyComponent = useMemo(() => {
       if (!replyTo || !replyMessage || isSystem) return null;
 
       return (
-        <div className={replyStyles({ isOwn })}>
-          <span className="font-medium text-xs">
+        <div className={replyStyles()}>
+          <span className="font-medium text-xs text-green-700 dark:text-green-400 flex items-center">
             {replyMessage.author === sender
               ? t("replying_to_self")
               : t("reply_to_user", { user: replyMessage.author })}
-            :
           </span>
-          <div className="text-xs opacity-75 truncate">{replyMessage.text}</div>
+          <div className="text-xs opacity-80 mt-1 pr-2">
+            {replyMessage.text}
+          </div>
         </div>
       );
     }, [replyTo, replyMessage, isSystem, isOwn, sender, t]);
@@ -159,6 +186,21 @@ export const Message = memo(
         </div>
       );
     }, [isOwn, isSystem, sender]);
+
+    // Forwarded indicator
+    const forwardedIndicator = useMemo(() => {
+      if (!isForwarded || isSystem) return null;
+
+      return (
+        <div className="text-xs text-neutral-600 dark:text-neutral-300 mb-3 py-1 italic flex items-center font-medium">
+          <FiCornerUpRight
+            className="mr-1.5 text-green-600 dark:text-green-400"
+            size={14}
+          />
+          {t("forwarded_message")}
+        </div>
+      );
+    }, [isForwarded, isSystem, t]);
 
     const messageMenu = useMemo(() => {
       if (isSystem || isDeleted || isPending) return null;
@@ -195,45 +237,67 @@ export const Message = memo(
     ]);
 
     return (
-      <div className={clsx("flex flex-col mb-4", isOwn ? "mr-4" : "ml-4")}>
-        <div
-          className={messageStyles({
-            isOwn,
-            isPending,
-            isSystem,
-            isDeleted,
-            className,
-          })}
-        >
-          {replyComponent}
-          {senderComponent}
-          <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
-            {isDeleted
-              ? t("message_deleted")
-              : isSystem
-                ? translateSystemMessage(content, t, systemMessageType, systemMessageParams)
-                : content}
-          </p>
+      <>
+        <div className={clsx("flex flex-col mb-4", isOwn ? "mr-4" : "ml-4")}>
+          <div
+            className={messageStyles({
+              isOwn,
+              isPending,
+              isSystem,
+              isDeleted,
+              isForwarded,
+              className,
+            })}
+          >
+            {replyComponent}
+            {senderComponent}
+            {forwardedIndicator}
+            <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
+              {isDeleted
+                ? t("message_deleted")
+                : isSystem
+                  ? translateSystemMessage(
+                      content,
+                      t,
+                      systemMessageType,
+                      systemMessageParams
+                    )
+                  : content}
+            </p>
 
-          {!isSystem && (
-            <div
-              className={clsx(
-                "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1 justify-between",
-                isOwn ? "flex-row-reverse" : "flex-row"
-              )}
-            >
-              <span className="text-[10px]">{formattedTime}</span>
-              <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                {isEdited && !isDeleted && (
-                  <span title={t("edited")}>{t("edited_short")}</span>
+            {!isSystem && (
+              <div
+                className={clsx(
+                  "text-xs text-neutral-500 dark:text-neutral-400 mt-1 text-right flex items-center space-x-1 justify-end",
+                  isOwn ? "flex-row-reverse" : "flex-row"
                 )}
+              >
+                <span className="text-[10px]">{formattedTime}</span>
+                <div className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center">
+                  {isEdited && !isDeleted && (
+                    <span title={t("edited")} className="flex items-center">
+                      <FiEdit2
+                        className="mr-1 text-green-600 dark:text-green-300"
+                        size={10}
+                      />
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {messageMenu}
+            {messageMenu}
+          </div>
         </div>
-      </div>
+
+        {/* Forward Modal */}
+        <ForwardModal
+          isOpen={isForwardModalOpen}
+          onClose={() => setIsForwardModalOpen(false)}
+          message={{ text: content, id: messageId }}
+          onForward={handleForwardToChats}
+        />
+      </>
     );
   }
 );

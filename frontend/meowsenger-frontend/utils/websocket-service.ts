@@ -1,6 +1,12 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
-import { generateMakeAdminSystemMessage, generateRemoveAdminSystemMessage, generateUpdateSettingsSystemMessage, generateAddUserSystemMessage, generateRemoveUserSystemMessage } from "./system-message-utils";
+import {
+  generateMakeAdminSystemMessage,
+  generateRemoveAdminSystemMessage,
+  generateUpdateSettingsSystemMessage,
+  generateAddUserSystemMessage,
+  generateRemoveUserSystemMessage,
+} from "./system-message-utils";
 
 export interface WebSocketMessage {
   type:
@@ -28,7 +34,7 @@ export interface WebSocketMessage {
   replyTo?: number; // ID of message being replied to
   isForwarded?: boolean; // Whether message is forwarded from another chat
   isRead?: boolean; // Whether message has been read by recipient
-  
+
   // Structured system message fields
   system_message_type?: string; // Type of system message
   system_message_params?: Record<string, string | number>; // Parameters for system message translation
@@ -71,6 +77,7 @@ const WS_CONSTANTS = {
   DESTINATIONS: {
     REGISTER: "/app/register",
     CHAT_SEND: "/app/chat.send",
+    CHAT_FORWARD: "/app/chat.forward",
     CHAT_SUBSCRIBE: "/app/chat.subscribe",
     CHATS_SUBSCRIBE: "/app/chats.subscribe",
     CHAT_READ: "/app/chat.read",
@@ -252,18 +259,64 @@ class WebSocketService {
     const username = sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME);
     if (username) {
       console.log("[WebSocket] Using username from session:", username);
-    } else if (typeof window !== "undefined") {
-      const user = JSON.parse(
-        sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USER) || "{}"
+      return;
+    }
+
+    // Check localStorage as a fallback
+    const localUsername = localStorage.getItem(
+      WS_CONSTANTS.STORAGE_KEYS.USERNAME
+    );
+    if (localUsername) {
+      console.log(
+        "[WebSocket] Using username from local storage:",
+        localUsername
       );
-      if (user && user.username) {
-        sessionStorage.setItem(
-          WS_CONSTANTS.STORAGE_KEYS.USERNAME,
-          user.username
+      sessionStorage.setItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME, localUsername);
+      return;
+    }
+
+    // Try to get username from user object in session storage
+    if (typeof window !== "undefined") {
+      try {
+        const user = JSON.parse(
+          sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USER) || "{}"
         );
-        console.log("[WebSocket] Stored username in session:", user.username);
+        if (user && user.username) {
+          sessionStorage.setItem(
+            WS_CONSTANTS.STORAGE_KEYS.USERNAME,
+            user.username
+          );
+          console.log("[WebSocket] Stored username in session:", user.username);
+          return;
+        }
+      } catch (e) {
+        console.error("[WebSocket] Error parsing user from session storage", e);
       }
     }
+
+    // Try to get username from user object in local storage as last resort
+    if (typeof window !== "undefined") {
+      try {
+        const user = JSON.parse(
+          localStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USER) || "{}"
+        );
+        if (user && user.username) {
+          sessionStorage.setItem(
+            WS_CONSTANTS.STORAGE_KEYS.USERNAME,
+            user.username
+          );
+          console.log(
+            "[WebSocket] Stored username from local storage:",
+            user.username
+          );
+          return;
+        }
+      } catch (e) {
+        console.error("[WebSocket] Error parsing user from local storage", e);
+      }
+    }
+
+    console.warn("[WebSocket] Could not determine username from storage");
   }
 
   /**
@@ -901,22 +954,46 @@ class WebSocketService {
   /**
    * Send a chat message
    */
-  public sendChatMessage(chatId: number, content: string): void {
-    if (!this.userId) {
-      console.error("[WebSocket] User ID not set");
-      return;
+  public sendChatMessage = async (
+    userId: number,
+    chatId: number,
+    message: string,
+    replyTo?: number,
+    isForwarded: boolean = false
+  ): Promise<boolean> => {
+    if (!this.client || !this.connected) {
+      console.error("WebSocket not connected. Cannot send message");
+      return false;
     }
 
-    const message: WebSocketMessage = {
-      type: "CHAT",
-      userId: this.userId,
-      chatId: chatId,
-      content: content,
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      console.log(
+        `Sending${isForwarded ? " forwarded" : ""} message via WebSocket`
+      );
 
-    this.sendOrQueueMessage(message, WS_CONSTANTS.DESTINATIONS.CHAT_SEND);
-  }
+      // Use different endpoints for regular and forwarded messages
+      const endpoint = isForwarded
+        ? WS_CONSTANTS.DESTINATIONS.CHAT_FORWARD
+        : WS_CONSTANTS.DESTINATIONS.CHAT_SEND;
+
+      this.client.publish({
+        destination: endpoint,
+        body: JSON.stringify({
+          type: "CHAT",
+          chatId: chatId,
+          userId: userId,
+          content: message,
+          timestamp: new Date(),
+          replyTo: replyTo,
+          isForwarded: isForwarded,
+        }),
+      });
+      return true;
+    } catch (error) {
+      console.error("Error sending message via WebSocket:", error);
+      return false;
+    }
+  };
 
   /**
    * Send a message with a reply
@@ -924,7 +1001,8 @@ class WebSocketService {
   public sendReplyMessage(
     chatId: number,
     content: string,
-    replyToId: number
+    replyToId: number,
+    isForwarded: boolean = false
   ): void {
     if (!this.userId) {
       console.error("[WebSocket] User ID not set");
@@ -938,9 +1016,14 @@ class WebSocketService {
       content: content,
       timestamp: new Date().toISOString(),
       replyTo: replyToId,
+      isForwarded: isForwarded,
     };
 
-    this.sendOrQueueMessage(message, WS_CONSTANTS.DESTINATIONS.CHAT_SEND);
+    const destination = isForwarded
+      ? WS_CONSTANTS.DESTINATIONS.CHAT_FORWARD
+      : WS_CONSTANTS.DESTINATIONS.CHAT_SEND;
+
+    this.sendOrQueueMessage(message, destination);
   }
 
   /**
@@ -950,6 +1033,15 @@ class WebSocketService {
     message: WebSocketMessage,
     destination: string
   ): void {
+    // Handle forwarded messages appropriately
+    if (
+      message.isForwarded &&
+      destination === WS_CONSTANTS.DESTINATIONS.CHAT_SEND
+    ) {
+      console.log("[WebSocket] Forwarding message, changing endpoint");
+      destination = WS_CONSTANTS.DESTINATIONS.CHAT_FORWARD;
+    }
+
     if (!this.client || !this.connected) {
       // Queue the message for sending when connected
       this.messageQueue.push({ ...message, __destination: destination as any });
@@ -1020,9 +1112,9 @@ class WebSocketService {
       return;
     }
 
-    const actorUsername = 
+    const actorUsername =
       sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
-      
+
     // Generate structured system message
     const systemMsgData = isPromotion
       ? generateMakeAdminSystemMessage(actorUsername, targetUsername)
@@ -1065,11 +1157,14 @@ class WebSocketService {
       return;
     }
 
-    const actorUsername = 
+    const actorUsername =
       sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
-      
+
     // Generate structured system message
-    const systemMsgData = generateRemoveUserSystemMessage(actorUsername, targetUsername);
+    const systemMsgData = generateRemoveUserSystemMessage(
+      actorUsername,
+      targetUsername
+    );
 
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
@@ -1107,11 +1202,14 @@ class WebSocketService {
       return;
     }
 
-    const actorUsername = 
+    const actorUsername =
       sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
-      
+
     // Generate structured system message
-    const systemMsgData = generateAddUserSystemMessage(actorUsername, targetUsername);
+    const systemMsgData = generateAddUserSystemMessage(
+      actorUsername,
+      targetUsername
+    );
 
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
@@ -1152,7 +1250,8 @@ class WebSocketService {
     }
 
     // Get the current username to use as the actor
-    const actorUsername = localStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "System";
+    const actorUsername =
+      localStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "System";
 
     // Generate a structured system message for settings update
     const systemMsgData = generateUpdateSettingsSystemMessage(actorUsername);
@@ -1169,7 +1268,7 @@ class WebSocketService {
       // Add structured system message data
       system_message_type: systemMsgData.system_message_type,
       system_message_params: systemMsgData.system_message_params,
-      isSystem: true // Mark as system message
+      isSystem: true, // Mark as system message
     };
 
     this.client.publish({

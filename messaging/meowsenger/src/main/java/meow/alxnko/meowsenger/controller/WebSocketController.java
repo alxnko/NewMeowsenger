@@ -88,7 +88,21 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.send")
     public WebSocketMessage sendMessage(@Payload WebSocketMessage message) {
+        log.debug("Received regular message via WebSocket: {}", message);
         return webSocketService.processAndSendMessage(message);
+    }
+    
+    /**
+     * Handle forwarding messages
+     */
+    @MessageMapping("/chat.forward")
+    public WebSocketMessage forwardMessage(@Payload WebSocketMessage message) {
+        log.info("Received forwarded message via WebSocket: {}", message);
+        
+        // Explicitly set isForwarded to true
+        message.setIsForwarded(true);
+        
+        return webSocketService.processAndSendForwardedMessage(message);
     }
     
     /**

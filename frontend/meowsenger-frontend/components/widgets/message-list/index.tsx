@@ -71,6 +71,7 @@ export interface MessageData {
   isDeleted?: boolean;
   isEdited?: boolean;
   isSystem?: boolean;
+  isForwarded?: boolean;
   systemMessageType?: string;
   systemMessageParams?: Record<string, string | number>;
   replyTo?: number;
@@ -112,6 +113,7 @@ const MemoizedMessage = memo(
       isPending={message.isPending}
       isRead={message.isRead}
       isEdited={message.isEdited}
+      isForwarded={message.isForwarded}
       isSystem={message.isSystem}
       systemMessageType={message.systemMessageType}
       systemMessageParams={message.systemMessageParams}
@@ -217,6 +219,7 @@ export const MessageList = memo(
           isDeleted: msg.isDeleted,
           isEdited: msg.isEdited,
           isSystem: msg.isSystem,
+          isForwarded: msg.isForwarded,
           systemMessageType: msg.system_message_type,
           systemMessageParams: msg.system_message_params,
           replyTo: msg.replyTo,
@@ -239,10 +242,21 @@ export const MessageList = memo(
     const scrollToBottom = useCallback(
       (behavior: ScrollBehavior = "smooth") => {
         if (messagesEndRef.current) {
+          // Using scrollIntoView with messagesEndRef is more reliable for scrolling
+          // This provides consistent behavior across different browsers and situations
           messagesEndRef.current.scrollIntoView({
             behavior: behavior,
             block: "end",
           });
+
+          // Also explicitly set scrollTop as a fallback to ensure scroll happens
+          const container = messageContainerRef.current;
+          if (container) {
+            // Use RAF to ensure this happens after any layout calculations
+            requestAnimationFrame(() => {
+              container.scrollTop = container.scrollHeight;
+            });
+          }
         }
         // Reset unread count when scrolling to bottom
         setUnreadCount(0);
@@ -351,17 +365,28 @@ export const MessageList = memo(
         return;
       }
 
-      // If already at bottom, scroll to bottom automatically
-      if (isAtBottom()) {
+      // Check if there are any non-pending messages from the current user among the new messages
+      // This means a message was confirmed by the server
+      const newMessages = messages.slice(prevMessagesLength.current);
+      const hasConfirmedUserMessage = newMessages.some(
+        (msg) => !msg.isPending && msg.author === user?.username
+      );
+
+      // If we found a confirmed user message, always scroll to bottom to show it
+      // This ensures the sender scrolls to their new message
+      if (hasConfirmedUserMessage) {
+        scrollToBottom();
+      } else if (isAtBottom()) {
+        // For other cases (messages from others), only scroll if already at bottom
         scrollToBottom();
       } else {
         // Otherwise, increment unread count
-        const newMessages = messages.length - prevMessagesLength.current;
-        setUnreadCount((prev) => prev + newMessages);
+        const newMessagesCount = messages.length - prevMessagesLength.current;
+        setUnreadCount((prev) => prev + newMessagesCount);
       }
 
       prevMessagesLength.current = messages.length;
-    }, [messages.length, isAtBottom, scrollToBottom]);
+    }, [messages.length, isAtBottom, scrollToBottom, user?.username]);
 
     // Scroll to bottom when someone is typing if user is already at the bottom
     useEffect(() => {
@@ -468,7 +493,8 @@ export const MessageList = memo(
         e.preventDefault();
         if (newMessage.trim()) {
           const container = messageContainerRef.current;
-          const wasAtBottom = isAtBottom();
+          // Always scroll to bottom after sending a message, regardless of current position
+          // This ensures consistent behavior for both sender and receiver
 
           if (editMessage) {
             // Update existing message
@@ -482,13 +508,11 @@ export const MessageList = memo(
           setNewMessage("");
           setReplyTo(undefined);
 
-          // Only scroll if already at bottom
-          if (wasAtBottom && container) {
-            // Use requestAnimationFrame for smoother scrolling
-            requestAnimationFrame(() => {
-              container.scrollTop = container.scrollHeight;
-            });
-          }
+          // Use requestAnimationFrame to ensure the DOM has updated
+          // before attempting to scroll to the bottom
+          requestAnimationFrame(() => {
+            scrollToBottom("auto");
+          });
         }
       },
       [
@@ -497,7 +521,7 @@ export const MessageList = memo(
         editMessage,
         onSendMessage,
         updateMessage,
-        isAtBottom,
+        scrollToBottom,
       ]
     );
 
@@ -737,6 +761,20 @@ export const MessageList = memo(
           </div>
         )}
 
+        {/* Edit indicator (if editing) - moved above input */}
+        {editMessage && (
+          <div className="px-4 pt-2 border-t border-b dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 flex items-center justify-between">
+            <div className="text-sm text-amber-600 dark:text-amber-400 truncate">
+              {t("editing_message", {
+                message: getSnippet(editMessage.content),
+              })}
+            </div>
+            <Button variant="ghost" size="sm" onClick={cancelEdit}>
+              <FiX />
+            </Button>
+          </div>
+        )}
+
         {/* Message input */}
         <div className="p-2 pb-0 border-t dark:border-neutral-800">
           <form onSubmit={handleSendMessage} className="flex gap-2">
@@ -755,18 +793,6 @@ export const MessageList = memo(
             </Button>
           </form>
         </div>
-
-        {/* Edit indicator (if editing) */}
-        {editMessage && (
-          <div className="py-2 pb-0 border-t dark:border-neutral-800 flex items-center justify-between">
-            <div className="text-sm text-amber-600 dark:text-amber-400">
-              {t("editing_message", { message: editMessage.content })}
-            </div>
-            <Button variant="ghost" size="sm" onClick={cancelEdit}>
-              <FiX />
-            </Button>
-          </div>
-        )}
       </div>
     );
   }

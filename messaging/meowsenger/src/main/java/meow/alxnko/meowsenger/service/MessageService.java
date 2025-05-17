@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import meow.alxnko.meowsenger.model.Chat;
 import meow.alxnko.meowsenger.model.Message;
 import meow.alxnko.meowsenger.model.User;
@@ -23,6 +24,7 @@ import jakarta.persistence.Query;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MessageService {
 
     private final MessageRepository messageRepository;
@@ -38,6 +40,14 @@ public class MessageService {
      */
     @Transactional
     public Message saveMessage(String content, Long senderId, Long chatId, Long replyToId) {
+        return saveMessage(content, senderId, chatId, replyToId, false);
+    }
+    
+    /**
+     * Save a new message to the database with optional reply-to reference and forwarded flag
+     */
+    @Transactional
+    public Message saveMessage(String content, Long senderId, Long chatId, Long replyToId, boolean isForwarded) {
         // Get the user
         User user = userRepository.findById(senderId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -45,6 +55,11 @@ public class MessageService {
         // Get the chat
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Chat not found"));
+        
+        // Log forwarded messages for debugging
+        if (isForwarded) {
+            log.info("Creating forwarded message from user {} to chat {}", senderId, chatId);
+        }
         
         // Create and save the message
         Message message = Message.builder()
@@ -55,7 +70,7 @@ public class MessageService {
                 .isDeleted(false)
                 .isEdited(false)
                 .isSystem(false)
-                .isForwarded(false)
+                .isForwarded(isForwarded)
                 .replyTo(replyToId) // Add reply-to reference if provided
                 .build();
         
@@ -87,7 +102,17 @@ public class MessageService {
      */
     @Transactional
     public Message saveMessage(String content, Long senderId, Long chatId) {
-        return saveMessage(content, senderId, chatId, null);
+        return saveMessage(content, senderId, chatId, null, false);
+    }
+    
+    /**
+     * Save a forwarded message
+     */
+    @Transactional
+    public Message saveForwardedMessage(String content, Long senderId, Long chatId, Long replyToId) {
+        log.info("Saving forwarded message: content='{}', sender={}, chat={}, replyTo={}", 
+                 content, senderId, chatId, replyToId);
+        return saveMessage(content, senderId, chatId, replyToId, true);
     }
     
     /**

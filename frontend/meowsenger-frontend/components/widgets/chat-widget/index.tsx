@@ -73,11 +73,11 @@ const ChatWidget = ({
           <Button
             as={Link}
             href={backUrl}
-            variant="ghost"
-            size="sm"
+            isIconOnly
+            variant="light"
             className="mr-2"
           >
-            <IoMdArrowRoundBack />
+            <IoMdArrowRoundBack className="text-xl" />
           </Button>
           {headerContent || (
             <h1 className="text-xl font-medium">{chat.name}</h1>

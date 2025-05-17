@@ -28,7 +28,15 @@ const chatItemStyles = tv({
 export interface ChatItemProps {
   id: string;
   name: string;
-  lastMessage?: string;
+  lastMessage?:
+    | string
+    | {
+        text: string;
+        author: string;
+        isSystem?: boolean;
+        system_message_type?: string;
+        system_message_params?: Record<string, string | number>;
+      };
   timestamp?: Date;
   isGroup?: boolean;
   active?: boolean;
@@ -50,9 +58,30 @@ export const ChatItem = memo(
     const { t } = useLanguage();
     const formattedTime = timestamp ? formatRelativeTime(timestamp, t) : "";
 
-    // Translate the last message if needed (for system messages)
-    const translatedLastMessage = lastMessage
-      ? translateSystemMessage(lastMessage, t)
+    // Get the message text and check if it's a system message with structured data
+    let messageText = "";
+    let isSystem = false;
+    let systemMessageType: string | undefined = undefined;
+    let systemMessageParams: Record<string, string | number> | undefined =
+      undefined;
+
+    if (typeof lastMessage === "string") {
+      messageText = lastMessage;
+    } else if (lastMessage && typeof lastMessage === "object") {
+      messageText = lastMessage.text || "";
+      isSystem = !!lastMessage.isSystem;
+      systemMessageType = lastMessage.system_message_type;
+      systemMessageParams = lastMessage.system_message_params;
+    }
+
+    // Translate the last message if needed
+    const translatedLastMessage = messageText
+      ? translateSystemMessage(
+          messageText,
+          t,
+          systemMessageType,
+          systemMessageParams
+        )
       : t("no_messages_short");
 
     return (

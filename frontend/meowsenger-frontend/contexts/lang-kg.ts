@@ -28,7 +28,7 @@ const kg = {
   save: "сактоо",
   cancel: "жокко чыгаруу",
   username_placeholder: "колдонуучу атын жазыңыз",
-  description_placeholder: "кыскача био жазыңыз",  // Чат
+  description_placeholder: "кыскача био жазыңыз", // Чат
   back: "артка",
   admin: "админ",
   tester: "тестер",
@@ -106,7 +106,8 @@ const kg = {
   members_count: "{count} мүчө",
   user_made_admin: "{actor} {target} админ кылды",
   user_removed_admin: "{actor} {target} админ укуктарынан ажыратты",
-  user_added_to_group: "{actor} {target} топко кошту",  user_removed_from_group: "{actor} {target} топтон чыгарды",
+  user_added_to_group: "{actor} {target} топко кошту",
+  user_removed_from_group: "{actor} {target} топтон чыгарды",
   user_changed_group_settings: "{actor} топтун жөндөөлөрүн өзгөрттү",
   updated_group_settings: "{actor} топтун жөндөөлөрүн жаңыртты",
   two_members: "2 мүчө",
@@ -114,7 +115,7 @@ const kg = {
   you_were_removed_from_group: "Сиз {chatName} топтон чыгарылдыңыз",
   you_are_now_admin: "Сиз бул топтун админи болдуңуз",
   you_are_no_longer_admin: "Сиз бул топтун админи эмессиз",
-  
+
   // Group management
   remove_from_group: "топтон чыгаруу",
   remove_admin_rights: "админ укуктарын алуу",
@@ -126,7 +127,17 @@ const kg = {
   confirm: "ырастоо",
   remove_admin_status_from: "{user} колдонуучусунан админ статусун алуу",
   save_changes: "өзгөртүүлөрдү сактоо",
-  
+
+  // Forward message
+  forward_message: "билдирүүнү бөлүшүү",
+  select_chats_to_forward: "бөлүшүү үчүн чаттарды тандаңыз",
+  no_chats_found: "чаттар табылган жок",
+  selected_chats: "{count} чат тандалды",
+  private_chat: "жеке чат",
+  group_chat: "топтук чат",
+  scroll_to_bottom: "ылдыйга түшүү",
+  forwarded_message: "бөлүшүлгөн билдирүү",
+
   // Time format
   less_than_x_seconds_ago: "жаңы эле",
   half_a_minute_ago: "30 секунд мурун",

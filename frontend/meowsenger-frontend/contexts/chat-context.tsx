@@ -104,6 +104,7 @@ interface ChatContextType {
     message: string
   ) => Promise<void>;
   sendMessage: (text: string, replyTo?: number) => Promise<void>;
+  forwardMessage: (text: string, chatIds: number[]) => Promise<void>;
   editMessage: (messageId: number, newText: string) => Promise<void>;
   deleteMessage: (messageId: number) => Promise<void>;
   markMessageAsRead: (messageId: number) => void;
@@ -123,11 +124,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [currentMessages, setCurrentMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState(0);
+  const [editMessage, setEditMessage] = useState<{
+    id: number;
+    content: string;
+  } | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState<
     { userId: number; username: string }[]
   >([]);
+  const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
+    new Map()
+  );
+  const [lastUpdate, setLastUpdate] = useState(0);
 
   // Use our message handling hook for optimized message processing
   const messageHandler = useMessageHandler();
@@ -157,9 +166,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [currentChat]);
 
-  const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
-    new Map()
-  );
   // States for lazy loading
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -299,6 +305,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         // Add a system notification to the chat messages
         if (message.content) {
+          // Generate a unique message ID based on content and timestamp to prevent duplicates
+          const messageKey = `admin_status_change_${message.targetUsername}_${message.isPromotion ? "add" : "remove"}_${Date.now().toString().substring(0, 8)}`;
+
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
             text: message.content,
@@ -312,17 +321,54 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             isEdited: false,
             isSystem: true,
             isForwarded: false,
+            // Add these structured fields for better translation
+            system_message_type:
+              message.system_message_type ||
+              (message.isPromotion ? "admin_added" : "admin_removed"),
+            system_message_params: message.system_message_params || {
+              actor: message.username || "User",
+              target: message.targetUsername || "user",
+            },
+            messageKey, // Add a unique key to prevent duplicates
           };
 
           // Add this message if it doesn't already exist
           setCurrentMessages((prev) => {
-            // Check if we already have this message (by ID or content)
+            // Check if we already have this message by ID, content, or messageKey
             const exists = prev.some(
               (m) =>
                 (message.messageId && m.id === message.messageId) ||
-                (m.isSystem && m.text === message.content)
+                (m.isSystem && m.text === message.content) ||
+                (m.messageKey && m.messageKey === messageKey)
             );
-            if (exists) return prev;
+
+            if (exists) {
+              console.log(
+                "Duplicate admin status message detected, not adding:",
+                messageKey
+              );
+              return prev;
+            }
+
+            // Check for existing admin messages about the same target user in the last 3 seconds
+            const now = Date.now() / 1000;
+            const recentDuplicates = prev.filter(
+              (m) =>
+                m.isSystem &&
+                (m.text.includes(`made ${message.targetUsername} an admin`) ||
+                  m.text.includes(
+                    `removed admin rights from ${message.targetUsername}`
+                  )) &&
+                now - m.time < 3
+            );
+
+            if (recentDuplicates.length > 0) {
+              console.log(
+                "Recent similar admin message found, not adding:",
+                messageKey
+              );
+              return prev;
+            }
 
             return [...prev, systemMessage];
           });
@@ -360,6 +406,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         // Add a system notification to the chat messages
         if (message.content) {
+          // Generate a unique message ID based on content and timestamp to prevent duplicates
+          const messageKey = `member_removed_${message.targetUsername}_${Date.now().toString().substring(0, 8)}`;
+
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
             text: message.content,
@@ -373,17 +422,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             isEdited: false,
             isSystem: true,
             isForwarded: false,
+            // Add structured fields for better translation
+            system_message_type: message.system_message_type || "user_removed",
+            system_message_params: message.system_message_params || {
+              actor: message.username || "User",
+              target: message.targetUsername || "user",
+            },
+            messageKey, // Add a unique key to prevent duplicates
           };
 
           // Add this message if it doesn't already exist
           setCurrentMessages((prev) => {
-            // Check if we already have this message (by ID or content)
+            // Check if we already have this message by ID, content, or messageKey
             const exists = prev.some(
               (m) =>
                 (message.messageId && m.id === message.messageId) ||
-                (m.isSystem && m.text === message.content)
+                (m.isSystem && m.text === message.content) ||
+                (m.messageKey && m.messageKey === messageKey)
             );
-            if (exists) return prev;
+
+            if (exists) {
+              console.log(
+                "Duplicate member removed message detected, not adding:",
+                messageKey
+              );
+              return prev;
+            }
+
+            // Check for existing removal messages about the same target user in the last 3 seconds
+            const now = Date.now() / 1000;
+            const recentDuplicates = prev.filter(
+              (m) =>
+                m.isSystem &&
+                m.text.includes(
+                  `removed ${message.targetUsername} from the group`
+                ) &&
+                now - m.time < 3
+            );
+
+            if (recentDuplicates.length > 0) {
+              console.log(
+                "Recent similar member removed message found, not adding:",
+                messageKey
+              );
+              return prev;
+            }
 
             return [...prev, systemMessage];
           });
@@ -467,6 +550,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             isEdited: false,
             isSystem: true,
             isForwarded: false,
+            // Add structured fields for better translation
+            system_message_type: message.system_message_type || "user_added",
+            system_message_params: message.system_message_params || {
+              actor: message.username || "User",
+              target: message.targetUsername || "user",
+            },
             messageKey, // Add key for deduplication
           };
 
@@ -479,7 +568,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 (m.isSystem && m.text === message.content) ||
                 (m.messageKey && m.messageKey === messageKey)
             );
-            if (exists) return prev;
+
+            if (exists) {
+              console.log(
+                "Duplicate member added message detected, not adding:",
+                messageKey
+              );
+              return prev;
+            }
+
+            // Check for existing add messages about the same target user in the last 3 seconds
+            const now = Date.now() / 1000;
+            const recentDuplicates = prev.filter(
+              (m) =>
+                m.isSystem &&
+                m.text.includes(
+                  `added ${message.targetUsername} to the group`
+                ) &&
+                now - m.time < 3
+            );
+
+            if (recentDuplicates.length > 0) {
+              console.log(
+                "Recent similar member added message found, not adding:",
+                messageKey
+              );
+              return prev;
+            }
 
             return [...prev, systemMessage];
           });
@@ -495,6 +610,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     },
     [currentChat]
   );
+
   // Handle WebSocket chat update messages (new chats, added to groups)
   const handleChatUpdateMessage = useCallback(
     (message: WebSocketMessage) => {
@@ -568,6 +684,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setWsConnected(false);
     };
   }, [token, user, handleChatUpdateMessage]);
+
   // Set up adaptive polling for chat list refresh
   useEffect(() => {
     if (!token) return;
@@ -641,6 +758,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       console.log("Received WebSocket message:", message);
 
       if (message.type === "CHAT") {
+        // Check if it's a forwarded message
+        if (message.isForwarded) {
+          console.log("⚠️ RECEIVED FORWARDED MESSAGE VIA WEBSOCKET:", message);
+        }
+
         // Convert WebSocket message to UI message format with all the enhanced data
         const newMessage: ChatMessage = {
           id: message.messageId || Date.now(),
@@ -650,11 +772,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           isDeleted: message.isDeleted || false,
           isEdited: message.isEdited || false,
           isSystem: message.isSystem || false,
-          isForwarded: message.isForwarded || false,
+          isForwarded: message.isForwarded || false, // Ensure this flag is set correctly
           replyTo: message.replyTo,
           isRead: message.isRead || false,
           isPending: false, // Messages from WebSocket are confirmed
         };
+
+        // Log the final processed message to confirm if isForwarded flag is preserved
+        if (message.isForwarded) {
+          console.log("⚠️ Processed forwarded message:", newMessage);
+        }
 
         // Handle system messages about user removal immediately - redirect if it's about current user
         if (
@@ -752,6 +879,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (pendingMessages.length > 0) {
+              // For forwarded messages, handle them differently
+              if (message.isForwarded) {
+                console.log(
+                  "Processing a forwarded message from current user:",
+                  message
+                );
+
+                // Try to find a pending forwarded message
+                const pendingForwardedIndex = prevMessages.findIndex(
+                  (msg) =>
+                    msg.isPending &&
+                    msg.author === user.username &&
+                    msg.isForwarded &&
+                    msg.text === message.content
+                );
+
+                if (pendingForwardedIndex !== -1) {
+                  console.log(
+                    "Found matching pending forwarded message, replacing it"
+                  );
+                  const updatedMessages = [...prevMessages];
+                  updatedMessages[pendingForwardedIndex] = newMessage;
+                  return updatedMessages;
+                }
+              }
+
               // Try to find an exact content match first
               const exactMatchIndex = prevMessages.findIndex(
                 (msg) =>
@@ -939,8 +1092,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               console.log("Current user lost admin rights");
               // Force refresh the chat details immediately
               openChat(currentChat.id);
-              // Show notification to the user
-              showToast("You are no longer an admin in this group", "info");
+
+              // Generate notification key to prevent duplicates
+              const notificationKey = `admin_removed_${Date.now().toString().substring(0, 5)}`;
+
+              // Check if we've recently shown this notification
+              if (!sessionStorage.getItem(notificationKey)) {
+                // Show notification to the user
+                showToast("You are no longer an admin in this group", "info");
+                // Store in session to prevent duplicates for short time
+                sessionStorage.setItem(notificationKey, "true");
+                setTimeout(() => {
+                  sessionStorage.removeItem(notificationKey);
+                }, 2000);
+              }
             } else if (
               user?.username &&
               message.content &&
@@ -949,8 +1114,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               console.log("Current user became an admin");
               // Force refresh the chat details
               openChat(currentChat.id);
-              // Show notification to the user
-              showToast("You are now an admin in this group", "success");
+
+              // Generate notification key to prevent duplicates
+              const notificationKey = `admin_added_${Date.now().toString().substring(0, 5)}`;
+
+              // Check if we've recently shown this notification
+              if (!sessionStorage.getItem(notificationKey)) {
+                // Show notification to the user
+                showToast("You are now an admin in this group", "success");
+                // Store in session to prevent duplicates for short time
+                sessionStorage.setItem(notificationKey, "true");
+                setTimeout(() => {
+                  sessionStorage.removeItem(notificationKey);
+                }, 2000);
+              }
             } else {
               // Admin change for someone else, just refresh the chat
               openChat(currentChat.id);
@@ -1138,6 +1315,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         if (response.status) {
           setCurrentChat(response.chat);
+
+          // Debug log to check for forwarded messages in the initial load
+          if (response.messages && response.messages.length > 0) {
+            console.log("Received messages from backend:", response.messages);
+            const forwardedMessages = response.messages.filter(
+              (msg) => msg.isForwarded
+            );
+            console.log(
+              `Found ${forwardedMessages.length} forwarded messages:`,
+              forwardedMessages
+            );
+          }
+
           setCurrentMessages(response.messages || []);
 
           // Set the oldest message ID for pagination if we have messages
@@ -1700,7 +1890,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           websocketService.sendReplyMessage(currentChat.id, text, replyTo);
         } else {
           // Regular message send
-          websocketService.sendChatMessage(currentChat.id, text);
+          websocketService.sendChatMessage(user.id, currentChat.id, text);
         }
       } else {
         console.log("WebSocket not connected, falling back to REST API");
@@ -1723,7 +1913,85 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const editMessage = async (messageId: number, newText: string) => {
+  const forwardMessage = async (text: string, chatIds: number[]) => {
+    if (!token || !user) return;
+
+    try {
+      console.log("Starting to forward message to chats:", chatIds);
+      // Create promises for each chat to forward to
+      const promises = chatIds.map(async (chatId) => {
+        try {
+          // Find the chat details
+          const targetChat = chats.find((chat) => chat.id === chatId);
+          if (!targetChat) {
+            console.error(`Chat with ID ${chatId} not found`);
+            return;
+          }
+
+          // Ensure WebSocket connection
+          const isConnected = await websocketService.ensureConnected(
+            user.id,
+            token
+          );
+
+          // Send via WebSocket if connected
+          if (isConnected) {
+            console.log(
+              `Forwarding message to chat ${chatId} via WebSocket with isForwarded=true`
+            );
+            // Use WebSocket to send the message with isForwarded flag
+            await websocketService.sendChatMessage(
+              user.id,
+              chatId,
+              text,
+              undefined, // replyTo
+              true // isForwarded
+            );
+
+            // Create optimistic forwarded message in UI
+            if (currentChat && currentChat.id === chatId) {
+              console.log(
+                "Adding optimistic forwarded message to current chat"
+              );
+              setCurrentMessages((prev) => [
+                ...prev,
+                {
+                  id: Date.now() + Math.random(),
+                  text,
+                  author: user.username,
+                  time: Math.floor(Date.now() / 1000),
+                  isDeleted: false,
+                  isEdited: false,
+                  isSystem: false,
+                  isForwarded: true, // Explicitly set as forwarded
+                  isPending: true,
+                },
+              ]);
+            }
+          } else {
+            // Fall back to REST API
+            console.log(
+              `Forwarding message to chat ${chatId} via API with isForwarded=true`
+            );
+            const to = targetChat.isGroup ? targetChat.id : targetChat.name;
+            await chatApi.sendMessage(token, to, text, undefined, true);
+          }
+        } catch (err) {
+          console.error(`Error forwarding message to chat ${chatId}:`, err);
+        }
+      });
+
+      // Wait for all forwards to complete
+      await Promise.all(promises);
+      console.log("Successfully forwarded messages to all target chats");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to forward messages"
+      );
+    }
+  };
+
+  const handleEditMessage = async (messageId: number, newText: string) => {
     if (!currentChat || !user || !token) return;
 
     try {
@@ -1843,7 +2111,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         leaveGroup,
         saveSettings,
         sendMessage,
-        editMessage,
+        forwardMessage,
+        editMessage: handleEditMessage,
         deleteMessage,
         markMessageAsRead,
         sendTypingIndicator,

@@ -28,7 +28,7 @@ const ru = {
   save: "сохранить",
   cancel: "отмена",
   username_placeholder: "введите имя пользователя",
-  description_placeholder: "введите краткую биографию",  // Чат
+  description_placeholder: "введите краткую биографию", // Чат
   back: "назад",
   admin: "админ",
   tester: "тестер",
@@ -39,22 +39,20 @@ const ru = {
   edited_short: "(изменено)",
   type_a_message: "введите сообщение...",
   send: "отправить",
-  loading_conversation: "загрузка беседы...",
-  conversation_not_found: "беседа не найдена или у вас нет доступа.",
+  loading_conversation: "загрузка чата...",
+  conversation_not_found: "чат не найден или у вас нет доступа.",
   back_to_chats: "назад к чатам",
   replying_to_self: "отвечаете себе",
   reply_to_user: "ответ пользователю {user}",
-  message_deleted: "это сообщение было удалено",  message_options: "опции сообщения",
+  message_deleted: "это сообщение было удалено",
+  message_options: "опции сообщения",
   message_actions: "действия с сообщением",
   // Системные сообщения
   system_joined_group: "{user} присоединился к группе",
   system_left_group: "{user} покинул группу",
-  system_created_group: "{user} создал группу",  system_added_user: "{adder} добавил(а) {added}",
+  system_created_group: "{user} создал группу",
+  system_added_user: "{adder} добавил(а) {added}",
   system_removed_user: "{remover} удалил(а) {removed}",
-  user_made_admin: "{actor} назначил(а) {target} администратором",
-  user_removed_admin: "{actor} снял(а) права администратора с {target}",
-  updated_group_settings: "{actor} обновил(а) настройки группы",
-  user_changed_group_settings: "{actor} изменил(а) настройки группы",
   search_chats: "поиск чатов...",
   no_chats_available: "нет доступных чатов",
   create_new_chat: "создать новый чат",
@@ -87,7 +85,7 @@ const ru = {
   something_went_wrong: "что-то пошло не так",
   try_again: "попробовать снова",
   error_apology:
-    "приносим извинения за неудобства. попробуйте обновить страницу или повторите попытку позже.",  // Языковой селектор
+    "приносим извинения за неудобства. попробуйте обновить страницу или повторите попытку позже.", // Языковой селектор
   language: "язык",
   english: "английский",
   spanish: "испанский",
@@ -102,7 +100,9 @@ const ru = {
   members_count: "{count} участников",
   user_made_admin: "{actor} назначил(а) {target} админом",
   user_removed_admin: "{actor} снял(а) права админа у {target}",
-  user_added_to_group: "{actor} добавил(а) {target} в группу",  user_removed_from_group: "{actor} удалил(а) {target} из группы",  user_changed_group_settings: "{actor} изменил(а) настройки группы",
+  user_added_to_group: "{actor} добавил(а) {target} в группу",
+  user_removed_from_group: "{actor} удалил(а) {target} из группы",
+  user_changed_group_settings: "{actor} изменил(а) настройки группы",
   updated_group_settings: "{actor} обновил(а) настройки группы",
   one_member: "1 участник",
   members: "участники",
@@ -113,7 +113,7 @@ const ru = {
   you_are_no_longer_admin: "Вы больше не администратор в этой группе",
   two_members: "2 участника",
   three_members: "3 участника",
-  
+
   // Group management
   remove_from_group: "удалить из группы",
   remove_admin_rights: "лишить прав администратора",
@@ -125,7 +125,17 @@ const ru = {
   confirm: "подтвердить",
   remove_admin_status_from: "лишить {user} статуса администратора",
   save_changes: "сохранить изменения",
-  
+
+  // Forward message
+  forward_message: "переслать сообщение",
+  select_chats_to_forward: "выберите чаты для пересылки",
+  no_chats_found: "чаты не найдены",
+  selected_chats: "выбрано чатов: {count}",
+  private_chat: "личный чат",
+  group_chat: "групповой чат",
+  scroll_to_bottom: "прокрутить вниз",
+  forwarded_message: "пересланное сообщение",
+
   // Time format
   less_than_x_seconds_ago: "только что",
   half_a_minute_ago: "30 секунд назад",

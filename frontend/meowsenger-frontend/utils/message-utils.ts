@@ -74,6 +74,16 @@ export const translateSystemMessage = (
     });
   }
 
+  // Pattern: "X removed admin rights from Y" - Admin rights removed
+  const adminRemovedRegex = /^(.+) removed admin rights from (.+)$/;
+  const adminRemovedMatch = message.match(adminRemovedRegex);
+  if (adminRemovedMatch) {
+    return t("user_removed_admin", {
+      actor: adminRemovedMatch[1],
+      target: adminRemovedMatch[2],
+    });
+  }
+
   // Pattern: "X updated group settings" - Group settings updated
   const settingsRegex = /^(.+) updated group settings$/;
   const settingsMatch = message.match(settingsRegex);
@@ -88,17 +98,6 @@ export const translateSystemMessage = (
     return t("user_added_to_group", {
       target: addedByMatch[1],
       actor: addedByMatch[2],
-    });
-  }
-
-  // Pattern: "X was добавил(а) to the group by Y в группу" - Malformed mixed language
-  const mixedAddedRegex =
-    /^(.+) was добавил\(а\) to the group by (.+) в группу$/;
-  const mixedAddedMatch = message.match(mixedAddedRegex);
-  if (mixedAddedMatch) {
-    return t("user_added_to_group", {
-      target: mixedAddedMatch[1],
-      actor: mixedAddedMatch[2],
     });
   }
 
@@ -137,6 +136,62 @@ export const translateSystemMessage = (
       return t("user_removed_from_group", { actor: remover, target: removed });
     } catch (e) {
       console.error("Error parsing user removed message:", message);
+      return message;
+    }
+  }
+
+  // Handle mixed language patterns (Cyrillic vs Latin)
+
+  // Check for "назначил(а)" which is the Russian word for "made/appointed"
+  if (message.includes("назначил") && message.includes("админом")) {
+    try {
+      const parts = message.split("назначил");
+      const actor = parts[0].trim();
+      const targetPart = parts[1].split("админом")[0];
+      const target = targetPart.includes("(а)")
+        ? targetPart.replace("(а)", "").trim()
+        : targetPart.trim();
+
+      return t("user_made_admin", { actor, target });
+    } catch (e) {
+      console.error(
+        "Error parsing Russian admin appointment message:",
+        message
+      );
+      return message;
+    }
+  }
+
+  // Check for "удалил(а)" which is the Russian word for "removed/deleted"
+  if (message.includes("удалил") && message.includes("из группы")) {
+    try {
+      const parts = message.split("удалил");
+      const actor = parts[0].trim();
+      const targetPart = parts[1].split("из группы")[0];
+      const target = targetPart.includes("(а)")
+        ? targetPart.replace("(а)", "").trim()
+        : targetPart.trim();
+
+      return t("user_removed_from_group", { actor, target });
+    } catch (e) {
+      console.error("Error parsing Russian user removal message:", message);
+      return message;
+    }
+  }
+
+  // Check for "добавил(а)" which is the Russian word for "added"
+  if (message.includes("добавил") && message.includes("в группу")) {
+    try {
+      const parts = message.split("добавил");
+      const actor = parts[0].trim();
+      const targetPart = parts[1].split("в группу")[0];
+      const target = targetPart.includes("(а)")
+        ? targetPart.replace("(а)", "").trim()
+        : targetPart.trim();
+
+      return t("user_added_to_group", { actor, target });
+    } catch (e) {
+      console.error("Error parsing Russian user addition message:", message);
       return message;
     }
   }

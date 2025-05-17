@@ -136,8 +136,7 @@ public class WebSocketService {
     }
     
     /**
-     * Process and save a new chat message, then broadcast it to all users in the chat
-     * including the sender
+     * Process and send a regular message
      */
     @Transactional
     public WebSocketMessage processAndSendMessage(WebSocketMessage inputMessage) {
@@ -145,6 +144,13 @@ public class WebSocketService {
         Long userId = inputMessage.getUserId();
         String content = inputMessage.getContent();
         Long replyToId = inputMessage.getReplyTo();
+        
+        // Check if this is a forwarded message
+        Boolean isForwarded = inputMessage.getIsForwarded();
+        if (isForwarded != null && isForwarded) {
+            log.info("Detected forwarded message, redirecting to dedicated handler");
+            return processAndSendForwardedMessage(inputMessage);
+        }
         
         // Check if chat exists
         Chat chat = chatRepository.findById(chatId)
@@ -182,6 +188,71 @@ public class WebSocketService {
                 .isSystem(savedMessage.isSystem())
                 .replyTo(savedMessage.getReplyTo())
                 .isForwarded(savedMessage.isForwarded())
+                .isRead(false)
+                .isGroup(chat.isGroup())
+                .chatName(chat.getName())
+                .build();
+        
+        // Send to all users in the chat including the sender
+        sendMessageToAllUsers(chatId, userId, responseMessage);
+        
+        // Clear typing status for this user
+        clearTypingStatus(chatId, userId);
+        
+        return responseMessage;
+    }
+    
+    /**
+     * Process and send a forwarded message
+     */
+    @Transactional
+    public WebSocketMessage processAndSendForwardedMessage(WebSocketMessage inputMessage) {
+        Long chatId = inputMessage.getChatId();
+        Long userId = inputMessage.getUserId();
+        String content = inputMessage.getContent();
+        Long replyToId = inputMessage.getReplyTo();
+        
+        log.info("Processing forwarded message: chat={}, user={}, content='{}'", chatId, userId, content);
+        
+        // Check if chat exists
+        Chat chat = chatRepository.findById(chatId)
+                .orElse(null);
+        if (chat == null) {
+            return createErrorMessage("Chat not found");
+        }
+        
+        // Check if user exists
+        User user = userRepository.findById(userId)
+                .orElse(null);
+        if (user == null) {
+            return createErrorMessage("User not found");
+        }
+        
+        // Check if user is member of the chat
+        if (!chatRepository.isUserInChat(chatId, userId)) {
+            return createErrorMessage("User is not a member of this chat");
+        }
+        
+        // Save message to database with isForwarded=true
+        Message savedMessage = messageService.saveForwardedMessage(content, userId, chatId, replyToId);
+        
+        log.info("Saved forwarded message with ID: {}, isForwarded: {}", 
+            savedMessage.getId(), savedMessage.isForwarded());
+        
+        // Build response with complete message data
+        WebSocketMessage responseMessage = WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.CHAT)
+                .chatId(chatId)
+                .userId(userId)
+                .username(user.getUsername())
+                .content(content)
+                .messageId(savedMessage.getId())
+                .timestamp(savedMessage.getSendTime())
+                .isEdited(savedMessage.isEdited())
+                .isDeleted(savedMessage.isDeleted())
+                .isSystem(savedMessage.isSystem())
+                .replyTo(savedMessage.getReplyTo())
+                .isForwarded(true)  // Explicitly set forwarded flag
                 .isRead(false)
                 .isGroup(chat.isGroup())
                 .chatName(chat.getName())

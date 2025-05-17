@@ -318,13 +318,30 @@ export const chatApi = {
     token: string,
     to: string | number,
     text: string,
-    replyTo?: number
-  ): Promise<ApiResponse> =>
-    apiFetch<ApiResponse>("/api/c/send_message", {
+    replyTo?: number,
+    isForwarded: boolean = false
+  ): Promise<ApiResponse> => {
+    console.log(`API sending${isForwarded ? " forwarded" : ""} message:`, {
+      to,
+      text,
+      replyTo,
+      isForwarded,
+    });
+
+    // Create payload with explicit isForwarded flag
+    const payload = {
+      to,
+      text,
+      replyTo,
+      isForwarded,
+    };
+
+    return apiFetch<ApiResponse>("/api/c/send_message", {
       method: "POST",
-      body: { to, text, replyTo },
+      body: payload,
       token,
-    }),
+    });
+  },
 
   saveSettings: (
     token: string,
