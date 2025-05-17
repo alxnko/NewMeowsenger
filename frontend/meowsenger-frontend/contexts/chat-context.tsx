@@ -15,6 +15,7 @@ import { useToast } from "./toast-context";
 import { useRouter } from "next/navigation"; // Import router for redirection
 import useMessageHandler from "@/hooks/useMessageHandler";
 import MessageCache from "@/utils/message-cache";
+import { useLanguage } from "@/contexts/language-context";
 
 // Chat types
 export interface ChatMessage {
@@ -150,9 +151,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (currentChat) {
         // Clean up pending messages periodically to prevent memory leaks
         const removed = messageHandler.cleanupPendingMessages();
-        if (removed > 0) {
-          console.log(`Cleaned up ${removed} stale pending messages`);
-        }
       }
     }, 30000); // Run every 30 seconds
 
@@ -178,6 +176,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   const { showToast } = useToast();
+  const { t } = useLanguage();
 
   // Centralized WebSocket event handling
   const dispatchChatUpdateEvent = useCallback(
@@ -192,7 +191,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           },
         });
         window.dispatchEvent(event);
-        console.log(`Dispatched chat update event: ${eventType}`);
       } catch (eventError) {
         console.error(`Error dispatching ${eventType} event:`, eventError);
       }
@@ -239,8 +237,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token || !user || !user.id || !wsConnected) return;
 
-    console.log("Setting up unified WebSocket listeners for user events");
-
     // Subscribe to admin status changes
     const adminStatusChangeSub = websocketService.subscribeToAdminStatusChanges(
       user.id,
@@ -258,12 +254,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       user.id,
       handleMemberAdded
     );
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      console.log("Cleaning up WebSocket subscriptions");
-      // No need to explicitly unsubscribe as the WebSocket service handles this internally
-    };
   }, [token, user, wsConnected]);
 
   // Helper function to trigger a chat list update event
@@ -274,8 +264,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Handle admin status change notification from WebSocket
   const handleAdminStatusChange = useCallback(
     (message: WebSocketMessage) => {
-      console.log("Received admin status change:", message);
-
       if (!currentChat) return;
 
       // If this is about the current chat
@@ -343,10 +331,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (exists) {
-              console.log(
-                "Duplicate admin status message detected, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -363,10 +347,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (recentDuplicates.length > 0) {
-              console.log(
-                "Recent similar admin message found, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -382,8 +362,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Handle member removed notification from WebSocket
   const handleMemberRemoved = useCallback(
     (message: WebSocketMessage) => {
-      console.log("Received member removed notification:", message);
-
       if (!currentChat || !user) return;
 
       // If this is about the current chat
@@ -442,10 +420,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (exists) {
-              console.log(
-                "Duplicate member removed message detected, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -461,10 +435,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (recentDuplicates.length > 0) {
-              console.log(
-                "Recent similar member removed message found, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -478,7 +448,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           (message.targetUsername && message.targetUsername === user.username)
         ) {
           // Show notification
-          showToast(`You were removed from ${currentChat.name}`, "info");
+          showToast(t("removed_from_group"), "info");
 
           // Close the chat
           setCurrentChat(null);
@@ -490,14 +460,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       } // Always refresh the chat list to ensure everything is up to date
       fetchChats();
     },
-    [currentChat, user]
+    [currentChat, user, showToast, t]
   );
 
   // Handle member added notification from WebSocket
   const handleMemberAdded = useCallback(
     (message: WebSocketMessage) => {
-      console.log("Received member added notification:", message);
-
       if (!currentChat) return;
 
       // If this is about the current chat
@@ -570,10 +538,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (exists) {
-              console.log(
-                "Duplicate member added message detected, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -589,10 +553,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
 
             if (recentDuplicates.length > 0) {
-              console.log(
-                "Recent similar member added message found, not adding:",
-                messageKey
-              );
               return prev;
             }
 
@@ -614,7 +574,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Handle WebSocket chat update messages (new chats, added to groups)
   const handleChatUpdateMessage = useCallback(
     (message: WebSocketMessage) => {
-      console.log("Received chat update message:", message);
       if (message.type === "CHAT_UPDATE") {
         // Always refresh the chat list to show the new/updated chat
         fetchChats();
@@ -626,31 +585,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         // Show a notification to the user based on update type
         if (message.updateType === "NEW_CHAT") {
-          showToast(`You were added to ${message.chatName}`, "info");
+          showToast(
+            t("added_to_group", { chatName: message.chatName || "" }),
+            "info"
+          );
         } else if (message.updateType === "MEMBER_ADDED") {
-          showToast(
-            message.content || "A new member was added to a chat",
-            "info"
-          );
+          showToast(message.content || t("member_added_to_group"), "info");
         } else if (message.updateType === "MEMBER_REMOVED") {
-          showToast(
-            message.content || "A member was removed from a chat",
-            "info"
-          );
+          showToast(message.content || t("member_removed_from_group"), "info");
         } else if (message.updateType === "ADMIN_CHANGED") {
-          showToast(
-            message.content || "Admin status changed in a chat",
-            "info"
-          );
+          showToast(message.content || t("admin_status_changed"), "info");
         } else if (message.updateType === "SETTINGS_CHANGED") {
           showToast(
-            message.updateMessage || "Chat settings were updated",
+            message.updateMessage || t("group_settings_updated"),
             "info"
           );
         }
       }
     },
-    [showToast, dispatchChatUpdateEvent]
+    [showToast, dispatchChatUpdateEvent, t]
   );
 
   // Connect to WebSocket when user is authenticated
@@ -661,7 +614,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       try {
         const connected = await websocketService.connect(user.id, token);
         setWsConnected(connected);
-        console.log("WebSocket connected:", connected);
 
         // Subscribe to chat updates (new chats, added to groups, etc.)
         if (connected) {
@@ -672,7 +624,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error("WebSocket connection error:", err);
-        setError("Failed to connect to real-time messaging service");
+        setError(t("error_ws_connection"));
       }
     };
 
@@ -718,7 +670,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // If user has been inactive, slow down polling
       if (timeSinceActivity > inactiveTimeThreshold) {
         pollingInterval = Math.min(pollingInterval * 1.5, maxPollingInterval);
-        console.log(`User inactive, adjusted polling to ${pollingInterval}ms`);
       }
 
       fetchChats();
@@ -755,14 +706,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Handle WebSocket messages for the current chat
   const handleWebSocketMessage = useCallback(
     (message: WebSocketMessage) => {
-      console.log("Received WebSocket message:", message);
-
       if (message.type === "CHAT") {
-        // Check if it's a forwarded message
-        if (message.isForwarded) {
-          console.log("⚠️ RECEIVED FORWARDED MESSAGE VIA WEBSOCKET:", message);
-        }
-
         // Convert WebSocket message to UI message format with all the enhanced data
         const newMessage: ChatMessage = {
           id: message.messageId || Date.now(),
@@ -777,11 +721,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           isRead: message.isRead || false,
           isPending: false, // Messages from WebSocket are confirmed
         };
-
-        // Log the final processed message to confirm if isForwarded flag is preserved
-        if (message.isForwarded) {
-          console.log("⚠️ Processed forwarded message:", newMessage);
-        }
 
         // Handle system messages about user removal immediately - redirect if it's about current user
         if (
@@ -799,7 +738,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
           if (!storedRemoval) {
             sessionStorage.setItem(removalKey, Date.now().toString());
-            showToast("You have been removed from this group", "info");
+            showToast(t("removed_from_group"), "info");
           }
 
           // Redirect to chats page
@@ -814,11 +753,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           message.content.includes("removed") &&
           message.content.includes("from the group")
         ) {
-          console.log(
-            "Detected system message about user removal:",
-            message.content
-          );
-
           // If it's the current chat, update the UI to reflect the member removal
           if (currentChat && message.chatId === currentChat.id) {
             // Extract the username of the removed user from the message
@@ -881,11 +815,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             if (pendingMessages.length > 0) {
               // For forwarded messages, handle them differently
               if (message.isForwarded) {
-                console.log(
-                  "Processing a forwarded message from current user:",
-                  message
-                );
-
                 // Try to find a pending forwarded message
                 const pendingForwardedIndex = prevMessages.findIndex(
                   (msg) =>
@@ -896,9 +825,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 );
 
                 if (pendingForwardedIndex !== -1) {
-                  console.log(
-                    "Found matching pending forwarded message, replacing it"
-                  );
                   const updatedMessages = [...prevMessages];
                   updatedMessages[pendingForwardedIndex] = newMessage;
                   return updatedMessages;
@@ -994,7 +920,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
             if (!storedRemoval) {
               sessionStorage.setItem(removalKey, Date.now().toString());
-              showToast("You have been removed from this group", "info");
+              showToast(t("removed_from_group"), "info");
             }
 
             // Redirect to chats page
@@ -1002,8 +928,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           }
           // If it's about another user, update the member list
           else if (currentChat && message.chatId === currentChat.id) {
-            console.log("Another user was removed, updating member list");
-
             // Create a system message about the removal
             const systemMessage: ChatMessage = {
               id: message.messageId || Date.now(),
@@ -1053,8 +977,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           currentChat &&
           message.chatId === currentChat.id
         ) {
-          console.log("User was added to chat, updating UI");
-
           // Create a system message about the addition
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
@@ -1089,7 +1011,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 `removed admin rights from ${user.username}`
               )
             ) {
-              console.log("Current user lost admin rights");
               // Force refresh the chat details immediately
               openChat(currentChat.id);
 
@@ -1099,7 +1020,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               // Check if we've recently shown this notification
               if (!sessionStorage.getItem(notificationKey)) {
                 // Show notification to the user
-                showToast("You are no longer an admin in this group", "info");
+                showToast(t("no_longer_admin"), "info");
                 // Store in session to prevent duplicates for short time
                 sessionStorage.setItem(notificationKey, "true");
                 setTimeout(() => {
@@ -1111,7 +1032,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               message.content &&
               message.content.includes(`made ${user.username} an admin`)
             ) {
-              console.log("Current user became an admin");
               // Force refresh the chat details
               openChat(currentChat.id);
 
@@ -1121,7 +1041,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               // Check if we've recently shown this notification
               if (!sessionStorage.getItem(notificationKey)) {
                 // Show notification to the user
-                showToast("You are now an admin in this group", "success");
+                showToast(t("now_admin"), "success");
                 // Store in session to prevent duplicates for short time
                 sessionStorage.setItem(notificationKey, "true");
                 setTimeout(() => {
@@ -1139,7 +1059,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [user, router, currentChat, showToast, dispatchChatUpdateEvent]
+    [user, router, currentChat, showToast, dispatchChatUpdateEvent, t]
   );
 
   // Subscribe to current chat WebSocket updates
@@ -1318,13 +1238,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
           // Debug log to check for forwarded messages in the initial load
           if (response.messages && response.messages.length > 0) {
-            console.log("Received messages from backend:", response.messages);
             const forwardedMessages = response.messages.filter(
               (msg) => msg.isForwarded
-            );
-            console.log(
-              `Found ${forwardedMessages.length} forwarded messages:`,
-              forwardedMessages
             );
           }
 
@@ -1346,13 +1261,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
           }
         } else {
-          setError("Failed to load chat");
+          setError(t("error_load_chat"));
           setCurrentChat(null);
           setCurrentMessages([]);
         }
       } catch (error) {
         console.error("Error opening chat:", error);
-        setError("Failed to load chat");
+        setError(t("error_load_chat"));
         setCurrentChat(null);
         setCurrentMessages([]);
       } finally {
@@ -1457,11 +1372,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         await fetchChats();
         return response;
       } else {
-        setError("Failed to create group");
+        setError(t("error_create_group"));
         return undefined;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create group");
+      setError(err instanceof Error ? err.message : t("error_create_group"));
       return undefined;
     } finally {
       setLoading(false);
@@ -1534,14 +1449,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Refresh current chat after adding a member to ensure we have the latest state
         await openChat(chatId);
 
-        showToast(`Added ${username} to the chat`, "success");
+        showToast(t("user_added_to_chat", { username }), "success");
         return true;
       } else {
-        setError("Failed to add member");
+        setError(t("error_add_member"));
         return false;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add member");
+      setError(err instanceof Error ? err.message : t("error_add_member"));
       return false;
     } finally {
       setLoading(false);
@@ -1611,10 +1526,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Refresh current chat after removing a member to ensure we have the latest state
         await openChat(currentChat.id);
       } else {
-        setError("Failed to remove member");
+        setError(t("error_remove_member"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove member");
+      setError(err instanceof Error ? err.message : t("error_remove_member"));
     } finally {
       setLoading(false);
     }
@@ -1639,10 +1554,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setCurrentMessages([]);
         await fetchChats();
       } else {
-        setError("Failed to leave group");
+        setError(t("error_leave_group"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to leave group");
+      setError(err instanceof Error ? err.message : t("error_leave_group"));
     } finally {
       setLoading(false);
     }
@@ -1656,14 +1571,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const targetUser = currentChat.users.find((u) => u.username === username);
 
       if (!targetUser) {
-        showToast(`User ${username} not found in this chat`, "error");
+        showToast(t("user_not_found", { username }), "error");
         return;
       }
 
       // Send websocket message to change admin status
       if (wsConnected) {
-        console.log(`Adding admin ${username} via WebSocket`);
-
         // Create system message content
         const systemMessage = `${user.username} made ${username} an admin`;
 
@@ -1702,7 +1615,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         );
 
         // Show confirmation toast
-        showToast(`${username} is now an admin`, "success");
+        showToast(t("user_now_admin", { username }), "success");
       } else {
         // Fallback to REST API if WebSocket is not connected
         setLoading(true);
@@ -1717,13 +1630,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           // Refresh the chat to get updated admin status
           await openChat(currentChat.id);
         } else {
-          showToast("Failed to make user an admin", "error");
+          showToast(t("failed_to_make_admin"), "error");
         }
         setLoading(false);
       }
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "Failed to make user an admin",
+        err instanceof Error ? err.message : t("failed_to_make_admin"),
         "error"
       );
     }
@@ -1737,14 +1650,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const targetUser = currentChat.users.find((u) => u.username === username);
 
       if (!targetUser) {
-        showToast(`User ${username} not found in this chat`, "error");
+        showToast(t("user_not_found", { username }), "error");
         return;
       }
 
       // Send websocket message to change admin status
       if (wsConnected) {
-        console.log(`Removing admin ${username} via WebSocket`);
-
         // Create system message content
         const systemMessage = `${user.username} removed admin rights from ${username}`;
 
@@ -1783,7 +1694,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         );
 
         // Show confirmation toast
-        showToast(`${username} is no longer an admin`, "success");
+        showToast(t("user_no_longer_admin", { username }), "success");
       } else {
         // Fallback to REST API if WebSocket is not connected
         setLoading(true);
@@ -1798,13 +1709,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           // Refresh the chat to get updated admin status
           await openChat(currentChat.id);
         } else {
-          showToast("Failed to remove admin status", "error");
+          showToast(t("failed_to_remove_admin"), "error");
         }
         setLoading(false);
       }
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "Failed to remove admin status",
+        err instanceof Error ? err.message : t("failed_to_remove_admin"),
         "error"
       );
     }
@@ -1833,10 +1744,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Refresh current chat after saving settings
         await openChat(currentChat.id);
       } else {
-        setError("Failed to save settings");
+        setError(t("error_save_settings"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save settings");
+      setError(err instanceof Error ? err.message : t("error_save_settings"));
     } finally {
       setLoading(false);
     }
@@ -1864,14 +1775,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         isPending: true, // Flag to indicate the message is being sent
       };
 
-      // Log the optimistic message for debugging
-      console.log("Creating optimistic message:", {
-        id: optimisticId,
-        text,
-        author: user.username,
-        isPending: true,
-      });
-
       setCurrentMessages((prev) => [...prev, optimisticMessage]);
 
       // Ensure WebSocket connection is established with the correct user ID
@@ -1882,9 +1785,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Send via WebSocket if connected
       if (isConnected) {
-        console.log(
-          `Sending message via WebSocket to chat ${currentChat.id}: "${text}"`
-        );
         if (replyTo) {
           // Use the reply-specific method if replying to a message
           websocketService.sendReplyMessage(currentChat.id, text, replyTo);
@@ -1893,7 +1793,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           websocketService.sendChatMessage(user.id, currentChat.id, text);
         }
       } else {
-        console.log("WebSocket not connected, falling back to REST API");
         // Fall back to REST API if WebSocket not connected
         const to = currentChat.isGroup ? currentChat.id : currentChat.name;
         await chatApi.sendMessage(token, to, text, replyTo);
@@ -1902,7 +1801,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // We no longer need to update the optimistic message to non-pending here
       // Because the WebSocket callback will handle this when the message is confirmed
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
+      setError(err instanceof Error ? err.message : t("error_send_message"));
 
       // Remove the failed optimistic message
       setCurrentMessages((prev) =>
@@ -1917,7 +1816,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (!token || !user) return;
 
     try {
-      console.log("Starting to forward message to chats:", chatIds);
       // Create promises for each chat to forward to
       const promises = chatIds.map(async (chatId) => {
         try {
@@ -1936,9 +1834,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
           // Send via WebSocket if connected
           if (isConnected) {
-            console.log(
-              `Forwarding message to chat ${chatId} via WebSocket with isForwarded=true`
-            );
             // Use WebSocket to send the message with isForwarded flag
             await websocketService.sendChatMessage(
               user.id,
@@ -1950,9 +1845,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
             // Create optimistic forwarded message in UI
             if (currentChat && currentChat.id === chatId) {
-              console.log(
-                "Adding optimistic forwarded message to current chat"
-              );
               setCurrentMessages((prev) => [
                 ...prev,
                 {
@@ -1969,10 +1861,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               ]);
             }
           } else {
-            // Fall back to REST API
-            console.log(
-              `Forwarding message to chat ${chatId} via API with isForwarded=true`
-            );
             const to = targetChat.isGroup ? targetChat.id : targetChat.name;
             await chatApi.sendMessage(token, to, text, undefined, true);
           }
@@ -1983,11 +1871,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Wait for all forwards to complete
       await Promise.all(promises);
-      console.log("Successfully forwarded messages to all target chats");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to forward messages"
-      );
+      setError(err instanceof Error ? err.message : t("error_forward_message"));
     }
   };
 
@@ -2016,7 +1901,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       );
 
       if (isConnected) {
-        console.log(`Editing message ${messageId} via WebSocket`);
         // Send the edit via WebSocket
         websocketService.editMessage(messageId, currentChat.id, newText);
       } else {
@@ -2024,7 +1908,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Could implement a REST API fallback for edits here
       }
     } catch (error) {
-      setError("Failed to edit message");
+      setError(t("error_edit_message"));
       console.error("Error editing message:", error);
     }
   };
@@ -2054,7 +1938,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       );
 
       if (isConnected) {
-        console.log(`Deleting message ${messageId} via WebSocket`);
         // Send the delete via WebSocket
         websocketService.deleteMessage(messageId, currentChat.id);
       } else {
@@ -2062,7 +1945,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Could implement a REST API fallback for deletes here
       }
     } catch (error) {
-      setError("Failed to delete message");
+      setError(t("error_delete_message"));
       console.error("Error deleting message:", error);
     }
   };

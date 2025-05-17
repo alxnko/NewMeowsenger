@@ -20,11 +20,12 @@ interface ThemeProviderProps {
 export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   children,
 }) => {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const { isLoggedIn, token } = useAuth();
   const [isSaving, setIsSaving] = React.useState(false);
+  const [hasLoadedPreferences, setHasLoadedPreferences] = React.useState(false);
 
-  // Load theme preference from backend on mount
+  // Load theme preference from backend on mount for logged in users
   useEffect(() => {
     if (isLoggedIn && token) {
       authApi
@@ -33,10 +34,15 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
           if (prefs.theme && ["light", "dark"].includes(prefs.theme)) {
             setTheme(prefs.theme);
           }
+          setHasLoadedPreferences(true);
         })
         .catch((err) => {
           console.error("Failed to load theme preference from server:", err);
+          setHasLoadedPreferences(true);
         });
+    } else {
+      // If not logged in, respect device theme but don't save
+      setHasLoadedPreferences(true);
     }
   }, [isLoggedIn, token, setTheme]);
 
@@ -55,12 +61,13 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
     }
   };
 
-  // Sync theme with backend when it changes
+  // Sync theme with backend when it changes, but only for logged-in users
+  // and only after we've loaded their preferences
   useEffect(() => {
-    if (theme && isLoggedIn) {
+    if (theme && isLoggedIn && hasLoadedPreferences) {
       syncTheme(theme);
     }
-  }, [theme, isLoggedIn]);
+  }, [theme, isLoggedIn, hasLoadedPreferences]);
 
   return (
     <ThemeContext.Provider value={{ syncTheme }}>

@@ -78,18 +78,12 @@ export default function ChatsPage() {
       } else if (eventType === "fetch_chats") {
         // Don't refresh if we just did a fetch within 1 second
         if (timeSinceLastUpdate < 1000) {
-          console.log("Skipping redundant chat refresh:", eventType);
           return;
         }
       }
 
-      console.log(
-        `WebSocket event (${eventType}) will trigger chat refresh in ${debounceTime}ms`
-      );
-
       // Schedule the refresh
       webSocketUpdateRef.current.timer = setTimeout(() => {
-        console.log(`Refreshing chat list due to ${eventType} event`);
         fetchChats();
         webSocketUpdateRef.current.lastUpdateTime = Date.now();
       }, debounceTime);

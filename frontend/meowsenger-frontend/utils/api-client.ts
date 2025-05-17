@@ -321,13 +321,6 @@ export const chatApi = {
     replyTo?: number,
     isForwarded: boolean = false
   ): Promise<ApiResponse> => {
-    console.log(`API sending${isForwarded ? " forwarded" : ""} message:`, {
-      to,
-      text,
-      replyTo,
-      isForwarded,
-    });
-
     // Create payload with explicit isForwarded flag
     const payload = {
       to,

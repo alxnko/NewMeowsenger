@@ -11,6 +11,7 @@ import { ChatProvider } from "@/contexts/chat-context";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ToastProvider } from "@/contexts/toast-context";
 import { CustomThemeProvider } from "@/contexts/theme-context";
+import CookieConsent from "@/components/elements/cookie-consent";
 
 export interface ProvidersProps {
   children: React.ReactNode;
@@ -28,14 +29,25 @@ declare module "@react-types/shared" {
 export function Providers({ children, themeProps }: ProvidersProps) {
   const router = useRouter();
 
+  // Default theme props to follow system theme
+  const defaultThemeProps: ThemeProviderProps = {
+    attribute: "class",
+    defaultTheme: "system",
+    enableSystem: true,
+    ...themeProps,
+  };
+
   return (
     <HeroUIProvider navigate={router.push}>
-      <NextThemesProvider {...themeProps}>
+      <NextThemesProvider {...defaultThemeProps}>
         <ToastProvider>
           <AuthProvider>
             <LanguageProvider>
               <CustomThemeProvider>
-                <ChatProvider>{children}</ChatProvider>
+                <ChatProvider>
+                  {children}
+                  <CookieConsent />
+                </ChatProvider>
               </CustomThemeProvider>
             </LanguageProvider>
           </AuthProvider>

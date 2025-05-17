@@ -23,6 +23,14 @@ const kg = {
   confirm_your_password: "сырсөздү ырастаңыз",
   your_username: "сиздин колдонуучу атыңыз",
   your_password: "сиздин сырсөзүңүз",
+  login_to_meowsenger: "meowsenger'ге кирүү",
+  welcome_back_enter_credentials:
+    "кайтып келгениңиз менен! маалыматтарыңызды киргизиңиз",
+  log_in: "кирүү",
+  dont_have_account: "аккаунтуңуз жокпу?",
+  create_account_to_start_messaging: "баарлашууну баштоо үчүн аккаунт түзүңүз",
+  creating_account: "аккаунт түзүлүүдө...",
+  logging_in: "кирүү жүргүзүлүүдө...",
   // Профиль
   edit_profile: "профилди түзөтүү",
   save: "сактоо",
@@ -62,6 +70,20 @@ const kg = {
   // Тосттор
   message_copied: "Билдирүү көчүрүлдү",
   failed_to_copy: "Билдирүү көчүрүлбөй калды",
+  removed_from_group: "Сиз бул топтон чыгарылдыңыз",
+  no_longer_admin: "Сиз бул топтун админи эмессиз",
+  now_admin: "Сиз бул топтун админи болдуңуз",
+  user_added_to_chat: "{username} колдонуучусу чатка кошулду",
+  user_not_found: "{username} колдонуучусу бул чатта табылган жок",
+  user_now_admin: "{username} эми админ болду",
+  failed_to_make_admin: "Колдонуучуну админ кылуу ишке ашпады",
+  user_no_longer_admin: "{username} мындан ары админ эмес",
+  failed_to_remove_admin: "Админ статусун алуу ишке ашпады",
+  added_to_group: "Сиз {chatName} топко кошулдуңуз",
+  member_added_to_group: "Бул топко жаңы мүчө кошулду",
+  member_removed_from_group: "Мүчө бул топтон чыгарылды",
+  admin_status_changed: "Бул топтогу админ статусу өзгөртүлдү",
+  group_settings_updated: "Топтун жөндөөлөрү жаңыртылды",
   // Ката бет
   oops: "ой!",
   something_went_wrong: "бир нерсе туура эмес болду",
@@ -143,14 +165,43 @@ const kg = {
   half_a_minute_ago: "30 секунд мурун",
   x_minutes_ago: "{count} мүнөт мурун",
   x_minutes_ago_plural: "{count} мүнөт мурун",
-  about_x_hours_ago: "болжол менен {count} саат мурун",
-  about_x_hours_ago_plural: "болжол менен {count} саат мурун",
+  about_x_hours_ago: "{count} саат мурун тегерегинде",
+  about_x_hours_ago_plural: "{count} саат мурун тегерегинде",
   x_days_ago: "{count} күн мурун",
   x_days_ago_plural: "{count} күн мурун",
-  about_x_months_ago: "болжол менен {count} ай мурун",
-  about_x_months_ago_plural: "болжол менен {count} ай мурун",
+  about_x_months_ago: "{count} ай мурун тегерегинде",
+  about_x_months_ago_plural: "{count} ай мурун тегерегинде",
   x_years_ago: "{count} жыл мурун",
   x_years_ago_plural: "{count} жыл мурун",
+  // Ката билдирүүлөрү
+  error_ws_connection:
+    "Реалдуу убакыт режиминдеги билдирүү кызматына туташуу ишке ашпады",
+  error_load_chat: "Чатты жүктөө ишке ашпады",
+  error_create_group: "Топту түзүү ишке ашпады",
+  error_add_member: "Мүчөнү кошуу ишке ашпады",
+  error_remove_member: "Мүчөнү чыгаруу ишке ашпады",
+  error_leave_group: "Топтон чыгуу ишке ашпады",
+  error_save_settings: "Жөндөөлөрдү сактоо ишке ашпады",
+  error_send_message: "Билдирүүнү жөнөтүү ишке ашпады",
+  error_edit_message: "Билдирүүнү түзөтүү ишке ашпады",
+  error_delete_message: "Билдирүүнү өчүрүү ишке ашпады",
+  error_forward_message: "Билдирүүлөрдү бөлүшүү ишке ашпады",
+  // Билдирүү аталыштары
+  toast_info: "Маалымат",
+  toast_success: "Ийгиликтүү",
+  toast_error: "Ката",
+
+  // Cookie consent
+  cookie_consent: "cookie жөндөөлөрү",
+  cookie_consent_description:
+    "бул сайт сиздин тажрыйбаңызды жакшыртуу үчүн cookie файлдарын колдонот. бул сайтты колдонууну улантуу менен, сиз аналитика, жеке ыңгайлаштыруу жана жарнама үчүн cookie файлдарын колдонуубузга макулдугуңузду бересиз.",
+  select_your_language: "тилди тандаңыз",
+  select_theme: "теманы тандаңыз",
+  auto_detected_language: "браузериңизден автоматтык түрдө аныкталды",
+  auto_detected_theme: "түзмөгүңүздөн автоматтык түрдө аныкталды",
+  preferences_not_saved:
+    "сиз системага киргенге чейин бул жөндөөлөр сакталбайт. биз сиздин түзмөгүңүздүн жөндөөлөрүн автоматтык түрдө аныктадык.",
+  accept_and_continue: "кабыл алуу жана улантуу",
 };
 
 export default kg;

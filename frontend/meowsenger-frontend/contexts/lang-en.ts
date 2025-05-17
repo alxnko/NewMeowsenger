@@ -23,6 +23,13 @@ const en = {
   confirm_your_password: "confirm your password",
   your_username: "your username",
   your_password: "your password",
+  login_to_meowsenger: "login to meowsenger",
+  welcome_back_enter_credentials: "welcome back! enter your credentials",
+  log_in: "log in",
+  dont_have_account: "don't have an account?",
+  create_account_to_start_messaging: "create an account to start messaging",
+  creating_account: "creating account...",
+  logging_in: "logging in...",
   // Profile page
   edit_profile: "edit profile",
   save: "save",
@@ -62,6 +69,32 @@ const en = {
   // Toasts
   message_copied: "Message copied to clipboard",
   failed_to_copy: "Failed to copy message",
+  removed_from_group: "You have been removed from this group",
+  no_longer_admin: "You are no longer an admin in this group",
+  now_admin: "You are now an admin in this group",
+  user_added_to_chat: "Added {username} to the chat",
+  user_not_found: "User {username} not found in this chat",
+  user_now_admin: "{username} is now an admin",
+  failed_to_make_admin: "Failed to make user an admin",
+  user_no_longer_admin: "{username} is no longer an admin",
+  failed_to_remove_admin: "Failed to remove admin status",
+  added_to_group: "You were added to {chatName}",
+  member_added_to_group: "A new member was added to this group",
+  member_removed_from_group: "A member was removed from this group",
+  admin_status_changed: "Admin status changed in this group",
+  group_settings_updated: "Group settings were updated",
+  // Error messages
+  error_ws_connection: "Failed to connect to real-time messaging service",
+  error_load_chat: "Failed to load chat",
+  error_create_group: "Failed to create group",
+  error_add_member: "Failed to add member",
+  error_remove_member: "Failed to remove member",
+  error_leave_group: "Failed to leave group",
+  error_save_settings: "Failed to save settings",
+  error_send_message: "Failed to send message",
+  error_edit_message: "Failed to edit message",
+  error_delete_message: "Failed to delete message",
+  error_forward_message: "Failed to forward messages",
   // Error page
   oops: "oops!",
   something_went_wrong: "something went wrong",
@@ -94,8 +127,6 @@ const en = {
   system_removed_user: "{remover} removed {removed}",
   user_made_admin: "{actor} made {target} an admin",
   user_removed_admin: "{actor} removed admin rights from {target}",
-  user_added_to_group: "{actor} added {target} to the group",
-  user_removed_from_group: "{actor} removed {target} from the group",
   user_changed_group_settings: "{actor} changed group settings",
   updated_group_settings: "{actor} updated group settings",
   // Message list additions
@@ -154,6 +185,22 @@ const en = {
   about_x_months_ago_plural: "about {count} months ago",
   x_years_ago: "{count} year ago",
   x_years_ago_plural: "{count} years ago",
+  // Toast titles
+  toast_info: "Info",
+  toast_success: "Success",
+  toast_error: "Error",
+
+  // Cookie consent
+  cookie_consent: "cookie settings",
+  cookie_consent_description:
+    "this site uses cookies to improve your experience. by continuing to use this site, you agree to our use of cookies for analytics, personalization, and advertising.",
+  select_your_language: "select your language",
+  select_theme: "select theme",
+  auto_detected_language: "automatically detected from your browser",
+  auto_detected_theme: "automatically detected from your device",
+  preferences_not_saved:
+    "these preferences will not be saved until you log in. we've automatically detected your device settings.",
+  accept_and_continue: "accept and continue",
 };
 
 export default en;

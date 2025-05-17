@@ -258,7 +258,6 @@ class WebSocketService {
   private setupUsername(): void {
     const username = sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME);
     if (username) {
-      console.log("[WebSocket] Using username from session:", username);
       return;
     }
 
@@ -1546,7 +1545,6 @@ class WebSocketService {
 
     // If userId and token are provided, try to connect
     if (userId !== undefined && token) {
-      console.log("[WebSocket] Connecting WebSocket with user ID:", userId);
       try {
         return await this.connect(userId, token);
       } catch (error) {
@@ -1562,10 +1560,6 @@ class WebSocketService {
         try {
           const user = JSON.parse(userJson);
           if (user && user.id && user.token) {
-            console.log(
-              "[WebSocket] Recovered user ID from session storage:",
-              user.id
-            );
             return await this.connect(user.id, user.token);
           }
         } catch (e) {

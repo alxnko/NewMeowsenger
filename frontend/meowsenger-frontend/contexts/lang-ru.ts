@@ -12,7 +12,7 @@ const ru = {
   already_have_account: "уже есть аккаунт?",
   // Страницы авторизации
   login: "войти",
-  signup: "зарегистрироваться",
+  signup: "регистрация",
   username: "имя пользователя",
   password: "пароль",
   confirm_password: "подтвердите пароль",
@@ -23,6 +23,13 @@ const ru = {
   confirm_your_password: "подтвердите ваш пароль",
   your_username: "ваше имя пользователя",
   your_password: "ваш пароль",
+  login_to_meowsenger: "вход в meowsenger",
+  welcome_back_enter_credentials: "с возвращением! введите свои данные",
+  log_in: "войти",
+  dont_have_account: "нет аккаунта?",
+  create_account_to_start_messaging: "создайте аккаунт чтобы начать общение",
+  creating_account: "создание аккаунта...",
+  logging_in: "вход в систему...",
   // Профиль
   edit_profile: "редактировать профиль",
   save: "сохранить",
@@ -77,9 +84,40 @@ const ru = {
   load_older_messages: "загрузить старые сообщения",
   is_typing: "печатает...",
   replying_to: "ответ",
+  // Заголовки уведомлений
+  toast_info: "Информация",
+  toast_success: "Успешно",
+  toast_error: "Ошибка",
   // Тосты
   message_copied: "Сообщение скопировано в буфер обмена",
   failed_to_copy: "Не удалось скопировать сообщение",
+  removed_from_group: "Вы были удалены из этой группы",
+  no_longer_admin: "Вы больше не администратор в этой группе",
+  now_admin: "Вы теперь администратор в этой группе",
+  user_added_to_chat: "Пользователь {username} добавлен в чат",
+  user_not_found: "Пользователь {username} не найден в этом чате",
+  user_now_admin: "{username} теперь администратор",
+  failed_to_make_admin: "Не удалось назначить пользователя администратором",
+  user_no_longer_admin: "{username} больше не администратор",
+  failed_to_remove_admin: "Не удалось снять статус администратора",
+  added_to_group: "Вы были добавлены в группу {chatName}",
+  member_added_to_group: "В эту группу был добавлен новый участник",
+  member_removed_from_group: "Участник был удален из этой группы",
+  admin_status_changed: "Статус администратора изменен в этой группе",
+  group_settings_updated: "Настройки группы были обновлены",
+  // Сообщения об ошибках
+  error_ws_connection:
+    "Не удалось подключиться к сервису сообщений в реальном времени",
+  error_load_chat: "Не удалось загрузить чат",
+  error_create_group: "Не удалось создать группу",
+  error_add_member: "Не удалось добавить участника",
+  error_remove_member: "Не удалось удалить участника",
+  error_leave_group: "Не удалось покинуть группу",
+  error_save_settings: "Не удалось сохранить настройки",
+  error_send_message: "Не удалось отправить сообщение",
+  error_edit_message: "Не удалось изменить сообщение",
+  error_delete_message: "Не удалось удалить сообщение",
+  error_forward_message: "Не удалось переслать сообщения",
   // Страница ошибки
   oops: "ой!",
   something_went_wrong: "что-то пошло не так",
@@ -149,6 +187,18 @@ const ru = {
   about_x_months_ago_plural: "около {count} месяцев назад",
   x_years_ago: "{count} год назад",
   x_years_ago_plural: "{count} лет назад",
+
+  // Cookie consent
+  cookie_consent: "настройки файлов cookie",
+  cookie_consent_description:
+    "этот сайт использует файлы cookie для улучшения вашего опыта. продолжая использовать этот сайт, вы соглашаетесь с нашим использованием файлов cookie для аналитики, персонализации и рекламы.",
+  select_your_language: "выберите язык",
+  select_theme: "выберите тему",
+  auto_detected_language: "автоматически определен из вашего браузера",
+  auto_detected_theme: "автоматически определен из вашего устройства",
+  preferences_not_saved:
+    "эти настройки не будут сохранены, пока вы не войдете в систему. мы автоматически определили настройки вашего устройства.",
+  accept_and_continue: "принять и продолжить",
 };
 
 export default ru;

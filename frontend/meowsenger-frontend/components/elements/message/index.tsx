@@ -101,16 +101,6 @@ export const Message = memo(
     className,
     isRead = false,
   }: MessageProps) => {
-    // Add console log to debug forwarded message state
-    useEffect(() => {
-      if (isForwarded) {
-        console.log(`Message ${messageId} is forwarded:`, {
-          isForwarded,
-          content,
-        });
-      }
-    }, [isForwarded, messageId, content]);
-
     const { editMessage, deleteMessage, sendMessage, forwardMessage } =
       useChat();
     const { isAdmin } = useAuth();

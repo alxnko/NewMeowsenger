@@ -51,12 +51,31 @@ interface LanguageProviderProps {
 export const LanguageProvider: React.FC<LanguageProviderProps> = ({
   children,
 }) => {
-  // Initialize with browser language or default to English
+  // Initialize with default English
   const [language, setLanguage] = useState<Language>("en");
-  const { user, token, isLoggedIn } = useAuth();
+  const { isLoggedIn, token } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [hasLoadedPreferences, setHasLoadedPreferences] = useState(false);
 
-  // Effect to load language from localStorage or backend on mount
+  // Detect browser language on initial load
+  useEffect(() => {
+    const detectBrowserLanguage = (): Language => {
+      // Get browser language (e.g., 'en-US', 'ru', 'ky')
+      const browserLang = navigator.language.split("-")[0].toLowerCase();
+
+      // Map to our supported languages
+      if (browserLang === "ru") return "ru";
+      if (browserLang === "ky") return "kg"; // Kyrgyz language code is 'ky' in browser
+      return "en"; // Default to English
+    };
+
+    // If not logged in or no preferences loaded yet, use browser language
+    if (!hasLoadedPreferences) {
+      setLanguage(detectBrowserLanguage());
+    }
+  }, [hasLoadedPreferences]);
+
+  // Effect to load language from backend for authenticated users
   useEffect(() => {
     if (isLoggedIn && token) {
       // First try to get from backend for authenticated users
@@ -66,15 +85,18 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({
           if (prefs.language && ["en", "ru", "kg"].includes(prefs.language)) {
             setLanguage(prefs.language as Language);
           }
+          setHasLoadedPreferences(true);
         })
         .catch((err) => {
           console.error("Failed to load language preference from server:", err);
           // Fall back to localStorage if API call fails
           loadFromLocalStorage();
+          setHasLoadedPreferences(true);
         });
     } else {
       // Load from localStorage for non-authenticated users
       loadFromLocalStorage();
+      setHasLoadedPreferences(true);
     }
   }, [isLoggedIn, token]);
 
@@ -91,24 +113,28 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({
     }
   };
 
-  // Save language preference when it changes
+  // Save language preference when it changes for authorized users
   useEffect(() => {
-    // Always save to localStorage for all users
-    localStorage.setItem("meowsenger-language", language);
+    // Only save to localStorage and backend if the user has explicitly set a preference
+    // or if they are logged in and we've loaded their preferences
+    if (hasLoadedPreferences && isLoggedIn) {
+      // Always save to localStorage for all users
+      localStorage.setItem("meowsenger-language", language);
 
-    // Only save to backend for authenticated users
-    if (isLoggedIn && token && !isSaving) {
-      setIsSaving(true);
-      authApi
-        .updateUserPreferences(token, { language })
-        .catch((err) => {
-          console.error("Failed to save language preference to server:", err);
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
+      // Only save to backend for authenticated users
+      if (token && !isSaving) {
+        setIsSaving(true);
+        authApi
+          .updateUserPreferences(token, { language })
+          .catch((err) => {
+            console.error("Failed to save language preference to server:", err);
+          })
+          .finally(() => {
+            setIsSaving(false);
+          });
+      }
     }
-  }, [language, isLoggedIn, token]);
+  }, [language, isLoggedIn, token, hasLoadedPreferences]);
 
   // Translation function (with optional interpolation)
   const t = (key: string, vars?: Record<string, string | number>): string => {

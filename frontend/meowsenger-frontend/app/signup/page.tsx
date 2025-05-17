@@ -5,6 +5,15 @@ import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/elements/protected-route";
+import { Input } from "@heroui/input";
+import { Button } from "@heroui/button";
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  CardFooter,
+} from "@/components/elements/card";
+import { FiUser, FiLock, FiAlertCircle, FiRepeat } from "react-icons/fi";
 
 export default function SignupPage() {
   const { register, loading, error, validationErrors, clearErrors } = useAuth();
@@ -46,120 +55,119 @@ export default function SignupPage() {
 
   return (
     <ProtectedRoute authRedirect={true}>
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-xl shadow-lg">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold">{t("signup")}</h1>
-            <p className="mt-2 text-muted-foreground">
+      <div className="flex items-center justify-center min-h-screen bg-background px-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="flex flex-col gap-1 items-center pb-2">
+            <h1 className="text-2xl font-semibold text-center lowercase">
+              {t("signup")}
+            </h1>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center lowercase">
               {t("create_account_to_start_messaging")}
             </p>
-          </div>
+          </CardHeader>
 
-          {error && (
-            <div className="p-3 text-sm text-white bg-red-500 rounded-md">
-              {error}
-            </div>
-          )}
+          <CardBody className="gap-4">
+            {error && (
+              <div className="p-3 text-sm rounded-md bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 flex items-center gap-2">
+                <FiAlertCircle className="flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium">
-                  {t("username")}
-                </label>
-                <input
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-10">
+                <Input
                   id="username"
                   name="username"
-                  type="text"
-                  required
+                  label={t("username")}
+                  labelPlacement="outside"
+                  placeholder={t("choose_username")}
                   value={formData.username}
                   onChange={handleChange}
-                  className={`w-full px-3 py-2 mt-1 border ${
-                    getFieldError("username")
-                      ? "border-red-500"
-                      : "border-muted"
-                  } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder={t("choose_username")}
+                  isRequired
+                  startContent={
+                    <FiUser className="text-neutral-400 flex-shrink-0" />
+                  }
+                  isInvalid={!!getFieldError("username")}
+                  errorMessage={getFieldError("username")}
+                  variant="bordered"
+                  radius="sm"
+                  classNames={{
+                    label: "lowercase text-sm",
+                    input: "lowercase",
+                  }}
                 />
-                {getFieldError("username") && (
-                  <p className="mt-1 text-sm text-red-500">
-                    {getFieldError("username")}
-                  </p>
-                )}
-              </div>
 
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium">
-                  {t("password")}
-                </label>
-                <input
+                <Input
                   id="password"
                   name="password"
                   type="password"
-                  required
+                  label={t("password")}
+                  labelPlacement="outside"
+                  placeholder={t("create_password")}
                   value={formData.password}
                   onChange={handleChange}
-                  className={`w-full px-3 py-2 mt-1 border ${
-                    getFieldError("password")
-                      ? "border-red-500"
-                      : "border-muted"
-                  } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder={t("create_password")}
+                  isRequired
+                  startContent={
+                    <FiLock className="text-neutral-400 flex-shrink-0" />
+                  }
+                  isInvalid={!!getFieldError("password")}
+                  errorMessage={getFieldError("password")}
+                  variant="bordered"
+                  radius="sm"
+                  classNames={{
+                    label: "lowercase text-sm",
+                    input: "lowercase",
+                  }}
                 />
-                {getFieldError("password") && (
-                  <p className="mt-1 text-sm text-red-500">
-                    {getFieldError("password")}
-                  </p>
-                )}
-              </div>
 
-              <div>
-                <label
-                  htmlFor="password2"
-                  className="block text-sm font-medium"
-                >
-                  {t("confirm_password")}
-                </label>
-                <input
+                <Input
                   id="password2"
                   name="password2"
                   type="password"
-                  required
+                  label={t("confirm_password")}
+                  labelPlacement="outside"
+                  placeholder={t("confirm_your_password")}
                   value={formData.password2}
                   onChange={handleChange}
-                  className={`w-full px-3 py-2 mt-1 border ${
-                    getFieldError("password2")
-                      ? "border-red-500"
-                      : "border-muted"
-                  } rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background`}
-                  placeholder={t("confirm_your_password")}
+                  isRequired
+                  startContent={
+                    <FiRepeat className="text-neutral-400 flex-shrink-0" />
+                  }
+                  isInvalid={!!getFieldError("password2")}
+                  errorMessage={getFieldError("password2")}
+                  variant="bordered"
+                  radius="sm"
+                  classNames={{
+                    label: "lowercase text-sm",
+                    input: "lowercase",
+                  }}
                 />
-                {getFieldError("password2") && (
-                  <p className="mt-1 text-sm text-red-500">
-                    {getFieldError("password2")}
-                  </p>
-                )}
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 text-white bg-primary rounded-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
-            >
-              {loading ? t("creating_account") : t("sign_up")}
-            </button>
+              <Button
+                type="submit"
+                isLoading={loading}
+                isDisabled={loading}
+                color="success"
+                fullWidth
+                radius="sm"
+                className="lowercase"
+              >
+                {loading ? t("creating_account") : t("signup")}
+              </Button>
+            </form>
+          </CardBody>
 
-            <div className="text-center mt-4">
-              <p className="text-muted-foreground">
-                {t("already_have_account")}{" "}
-                <Link href="/login" className="text-primary hover:underline">
-                  {t("login_here")}
-                </Link>
-              </p>
-            </div>
-          </form>
-        </div>
+          <CardFooter className="flex justify-center pt-0">
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 lowercase">
+              {t("already_have_account")}{" "}
+              <Link href="/login" className="text-primary hover:underline">
+                {t("login_here")}
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
       </div>
     </ProtectedRoute>
   );
