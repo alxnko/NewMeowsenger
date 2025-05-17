@@ -107,84 +107,6 @@ export default function GroupChatPage() {
     return currentChat.admins?.includes(user.username);
   }, [currentChat, user]);
 
-  const handleSaveSettings = async () => {
-    if (!groupName.trim()) return;
-
-    setSettingsLoading(true);
-    try {
-      await saveSettings(
-        groupName,
-        groupDescription,
-        `${user?.username} updated group settings`
-      );
-      setShowSettingsModal(false);
-    } catch (error) {
-      console.error("Error saving settings:", error);
-    } finally {
-      setSettingsLoading(false);
-    }
-  };
-
-  const openUserActionModal = (
-    actionType: "add" | "remove" | "promote" | "demote",
-    username?: string
-  ) => {
-    setUserActionType(actionType);
-    setSelectedUser(username || null);
-    if (actionType === "add") {
-      setNewUsername("");
-    }
-    setShowUserActionModal(true);
-  };
-
-  const handleUserAction = async () => {
-    if (!currentChat || !user) return;
-
-    setSettingsLoading(true);
-    try {
-      if (userActionType === "add" && newUsername) {
-        // Fix: pass the correct parameters - chatId, userId, username
-        await addMember(
-          currentChat.id,
-          0, // Using 0 as a placeholder userId which the backend will resolve from username
-          newUsername
-        );
-      } else if (userActionType === "remove" && selectedUser) {
-        await removeMember(
-          selectedUser,
-          `${user.username} removed ${selectedUser} from the group`
-        );
-      } else if (userActionType === "promote" && selectedUser) {
-        await addAdmin(
-          selectedUser,
-          `${user.username} made ${selectedUser} an admin`
-        );
-      } else if (userActionType === "demote" && selectedUser) {
-        await removeAdmin(
-          selectedUser,
-          `${user.username} removed admin rights from ${selectedUser}`
-        );
-      }
-
-      setShowUserActionModal(false);
-
-      if (id) {
-        const groupId = parseInt(id as string);
-        if (!isNaN(groupId)) {
-          await openChat(groupId);
-        }
-      }
-    } catch (error) {
-      console.error("Error performing user action:", error);
-    } finally {
-      setSettingsLoading(false);
-    }
-  };
-
-  if (!user) {
-    return <div className="p-4">{t("please_log_in")}</div>;
-  }
-
   const groupHeaderContent = useMemo(() => {
     if (!currentChat) return null;
     const membersCount = currentChat.users?.length || 0;
@@ -241,7 +163,8 @@ export default function GroupChatPage() {
                   const isMemberAdmin =
                     member.is_admin ||
                     currentChat.admins?.includes(member.username);
-                  const isCurrentUser = member.username === user.username;
+                  const isCurrentUser =
+                    user && member.username === user.username; // Added user check
                   // Current user can only manage other members if they're an admin
                   const canManageMember = isAdmin && !isCurrentUser && !isOwner;
 
@@ -541,6 +464,85 @@ export default function GroupChatPage() {
     user,
     t,
   ]);
+
+  // Moved the early return after all hook calls
+  if (!user) {
+    return <div className="p-4">{t("please_log_in")}</div>;
+  }
+
+  const handleSaveSettings = async () => {
+    if (!groupName.trim()) return;
+
+    setSettingsLoading(true);
+    try {
+      await saveSettings(
+        groupName,
+        groupDescription,
+        `${user?.username} updated group settings`
+      );
+      setShowSettingsModal(false);
+    } catch (error) {
+      console.error("Error saving settings:", error);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const openUserActionModal = (
+    actionType: "add" | "remove" | "promote" | "demote",
+    username?: string
+  ) => {
+    setUserActionType(actionType);
+    setSelectedUser(username || null);
+    if (actionType === "add") {
+      setNewUsername("");
+    }
+    setShowUserActionModal(true);
+  };
+
+  const handleUserAction = async () => {
+    if (!currentChat || !user) return;
+
+    setSettingsLoading(true);
+    try {
+      if (userActionType === "add" && newUsername) {
+        // Fix: pass the correct parameters - chatId, userId, username
+        await addMember(
+          currentChat.id,
+          0, // Using 0 as a placeholder userId which the backend will resolve from username
+          newUsername
+        );
+      } else if (userActionType === "remove" && selectedUser) {
+        await removeMember(
+          selectedUser,
+          `${user.username} removed ${selectedUser} from the group`
+        );
+      } else if (userActionType === "promote" && selectedUser) {
+        await addAdmin(
+          selectedUser,
+          `${user.username} made ${selectedUser} an admin`
+        );
+      } else if (userActionType === "demote" && selectedUser) {
+        await removeAdmin(
+          selectedUser,
+          `${user.username} removed admin rights from ${selectedUser}`
+        );
+      }
+
+      setShowUserActionModal(false);
+
+      if (id) {
+        const groupId = parseInt(id as string);
+        if (!isNaN(groupId)) {
+          await openChat(groupId);
+        }
+      }
+    } catch (error) {
+      console.error("Error performing user action:", error);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   return (
     <ChatWidget

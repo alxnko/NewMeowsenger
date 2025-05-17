@@ -1,29 +1,35 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN pip install --upgrade pip
 
-# Copy requirements file and install dependencies
+# Copy requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
-# Copy project files
-COPY . .
+# --- Second Stage: Runtime ---
+FROM python:3.11-slim AS final
+WORKDIR /app
 
-# Copy the .env file (the .env.local file will be ignored due to .dockerignore)
-COPY .env .
+# Copy Python packages from builder stage
+COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements.txt .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Install Python packages as root before creating the non-root user
+RUN pip install --no-cache-dir /wheels/*
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Create a non-root user and group
+RUN groupadd -r appuser && useradd --create-home -r -g appuser appuser
 
-# Command to run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "meowsenger_backend.wsgi:application"]
+# Copy application code
+COPY --chown=appuser:appuser ./meowsenger_backend /app/meowsenger_backend
+COPY --chown=appuser:appuser manage.py /app/
+
+USER appuser
+
+# Expose port and run Gunicorn
+# Cloud Run injects the PORT environment variable.
+CMD ["gunicorn", "--bind", ":$PORT", "--workers", "1", "--threads", "8", "--timeout", "0", "meowsenger_backend.wsgi:application"]

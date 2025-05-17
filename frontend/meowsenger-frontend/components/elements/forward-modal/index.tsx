@@ -106,8 +106,15 @@ export const ForwardModal = ({
               filteredChats.map((chat) => (
                 <div
                   key={chat.id}
+                  role="button"
+                  tabIndex={0}
                   className="flex items-center p-2 border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors rounded-md cursor-pointer"
                   onClick={() => toggleChatSelection(chat.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      toggleChatSelection(chat.id);
+                    }
+                  }}
                 >
                   <Checkbox
                     isSelected={selectedChats.includes(chat.id)}

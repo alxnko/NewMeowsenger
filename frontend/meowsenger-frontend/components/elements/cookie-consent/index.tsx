@@ -86,10 +86,12 @@ export const CookieConsent: React.FC = () => {
   return (
     <Modal
       isOpen={isOpen}
+      hideCloseButton
       onClose={() => {}} // Empty function to prevent closing by escape/clicking outside
       isDismissable={false} // Cannot be dismissed
       backdrop="blur"
       className="lowercase"
+      placement="center"
     >
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
