@@ -1,4 +1,4 @@
-import { ReactNode, memo } from "react";
+import { ReactNode, memo, useEffect } from "react";
 import Link from "next/link";
 import { IoMdArrowRoundBack } from "react-icons/io";
 import { useLanguage } from "@/contexts/language-context";
@@ -22,7 +22,7 @@ export interface ChatWidgetProps {
 
 const ChatWidget = ({
   chat,
-  messages,
+  messages = [],
   loading,
   error,
   onSendMessage,
@@ -67,51 +67,33 @@ const ChatWidget = ({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="fixed top-0 right-4 left-1 h-14 flex items-center justify-between border-b dark:border-neutral-800">
-        <div className="flex items-center space-x-3">
-          <Button as={Link} href={backUrl} variant="light" isIconOnly>
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between p-2 pt-1 border-b dark:border-neutral-800">
+        <div className="flex items-center gap-2">
+          <Button
+            as={Link}
+            href={backUrl}
+            variant="ghost"
+            size="sm"
+            className="mr-2"
+          >
             <IoMdArrowRoundBack />
           </Button>
-          <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center text-success font-medium">
-            {chat.name[0].toLowerCase()}
-          </div>
-          {headerContent ? (
-            headerContent
-          ) : (
-            <div>
-              <div className="flex items-center">
-                <h3 className="font-medium lowercase truncate max-w-[calc(100vw-250px)]">
-                  {chat.name}
-                </h3>
-                {chat.isVerified && (
-                  <span className="ml-1 text-success">✓</span>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground lowercase">
-                {chat.isAdmin ? t("admin") : ""}
-                {chat.isTester && chat.isAdmin ? " • " : ""}
-                {chat.isTester ? t("tester") : ""}
-              </p>
-            </div>
+          {headerContent || (
+            <h1 className="text-xl font-medium">{chat.name}</h1>
           )}
+          <WebSocketStatus size="sm" />
         </div>
-
-        {/* Connection status indicator */}
-        <WebSocketStatus size="sm" />
       </div>
 
-      {/* Message list */}
-      <div className="flex-1">
-        <MessageList
-          messages={messages}
-          currentUserId={currentUserId}
-          onSendMessage={onSendMessage}
-          onMarkAsRead={onMarkAsRead}
-          isConnected={isConnected}
-          className="h-full mt-10"
-        />
-      </div>
+      <MessageList
+        messages={messages}
+        currentUserId={currentUserId}
+        onSendMessage={onSendMessage}
+        onMarkAsRead={onMarkAsRead}
+        className="flex-1"
+        isConnected={isConnected}
+      />
     </div>
   );
 };

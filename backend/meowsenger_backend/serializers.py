@@ -21,6 +21,8 @@ class UserSerializer(serializers.ModelSerializer):
             "is_verified",
             "is_staff",
             "reg_time",
+            "language",
+            "theme",
         )
         read_only_fields = ("reg_time",)
 

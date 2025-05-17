@@ -545,7 +545,7 @@ export default function GroupChatPage() {
   return (
     <ChatWidget
       chat={currentChat}
-      messages={currentMessages}
+      messages={currentMessages || []}
       loading={loading}
       error={error}
       onSendMessage={sendMessage}

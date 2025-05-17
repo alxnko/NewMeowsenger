@@ -19,7 +19,7 @@ import { FiX } from "react-icons/fi";
 
 // Styles remain the same
 const messageListStyles = tv({
-  base: "flex flex-col max-h-[calc(100dvh-90px)]",
+  base: "flex flex-col min-h-[calc(100dvh-90px)] max-h-[calc(100dvh-90px)]",
 });
 
 // Styles for the scroll button
@@ -71,6 +71,8 @@ export interface MessageData {
   isDeleted?: boolean;
   isEdited?: boolean;
   isSystem?: boolean;
+  systemMessageType?: string;
+  systemMessageParams?: Record<string, string | number>;
   replyTo?: number;
 }
 
@@ -91,7 +93,13 @@ const MemoizedMessage = memo(
     onReply,
     onEdit,
   }: {
-    message: MessageData;
+    message: MessageData & {
+      messageId: number;
+      replyMessage?: {
+        text: string;
+        author: string;
+      };
+    };
     username: string | undefined;
     onReply: (message: MessageData) => void;
     onEdit: (message: MessageData) => void;
@@ -105,7 +113,11 @@ const MemoizedMessage = memo(
       isRead={message.isRead}
       isEdited={message.isEdited}
       isSystem={message.isSystem}
+      systemMessageType={message.systemMessageType}
+      systemMessageParams={message.systemMessageParams}
       replyTo={message.replyTo}
+      replyMessage={message.replyMessage}
+      messageId={message.messageId}
       onReply={() => onReply(message)}
       onEdit={() => onEdit(message)}
     />
@@ -116,7 +128,7 @@ MemoizedMessage.displayName = "MemoizedMessage";
 
 export const MessageList = memo(
   ({
-    messages,
+    messages = [],
     currentUserId,
     onSendMessage,
     onMarkAsRead,
@@ -159,6 +171,62 @@ export const MessageList = memo(
 
     // Prevent loading messages multiple times in succession
     const isLoadingRef = useRef(false);
+
+    // Ensure messages is always an array
+    const safeMessages = Array.isArray(messages) ? messages : [];
+
+    // Create a map of messages for faster lookup
+    const messagesMap = useMemo(() => {
+      const map = new Map();
+      safeMessages.forEach((msg) => {
+        map.set(msg.id, msg);
+      });
+      return map;
+    }, [safeMessages]);
+
+    // Get reply message info
+    const getReplyMessageInfo = useCallback(
+      (replyId: number) => {
+        const msg = messagesMap.get(replyId);
+        if (!msg) return undefined;
+
+        return {
+          text: msg.text,
+          author: msg.author,
+        };
+      },
+      [messagesMap]
+    );
+
+    // Memoize message data conversion to avoid recalculation on every render
+    const messageDataList = useMemo(
+      () =>
+        safeMessages.map((msg) => ({
+          id: msg.id,
+          content: msg.text,
+          timestamp: new Date(msg.time * 1000),
+          sender: {
+            id: msg.author,
+            name:
+              typeof msg.author === "string"
+                ? msg.author
+                : `User ${msg.author}`,
+          },
+          isPending: msg.isPending,
+          isRead: msg.isRead,
+          isDeleted: msg.isDeleted,
+          isEdited: msg.isEdited,
+          isSystem: msg.isSystem,
+          systemMessageType: msg.system_message_type,
+          systemMessageParams: msg.system_message_params,
+          replyTo: msg.replyTo,
+          messageId: msg.id,
+          replyMessage: msg.replyTo
+            ? getReplyMessageInfo(msg.replyTo)
+            : undefined,
+        })),
+      [safeMessages, getReplyMessageInfo]
+    );
 
     // Set input focus when editing message
     useEffect(() => {
@@ -510,30 +578,6 @@ export const MessageList = memo(
       [currentChat, sendTypingIndicator, editMessage]
     );
 
-    // Memoize message data conversion to avoid recalculation on every render
-    const messageDataList = useMemo(
-      () =>
-        messages.map((msg) => ({
-          id: msg.id,
-          content: msg.text,
-          timestamp: new Date(msg.time * 1000),
-          sender: {
-            id: msg.author,
-            name:
-              typeof msg.author === "string"
-                ? msg.author
-                : `User ${msg.author}`,
-          },
-          isPending: msg.isPending,
-          isRead: msg.isRead,
-          isDeleted: msg.isDeleted,
-          isEdited: msg.isEdited,
-          isSystem: msg.isSystem,
-          replyTo: msg.replyTo,
-        })),
-      [messages]
-    );
-
     // Filter typing users once and memoize
     const currentlyTypingUsers = useMemo(
       () => typingUsers.filter((user) => user.userId !== currentUserId),
@@ -556,7 +600,7 @@ export const MessageList = memo(
             <>
               <div className="flex mr-2">{dotIndicator}</div>
               <span>
-                {t("is_typing", { user: currentlyTypingUsers[0].username })}
+                {currentlyTypingUsers[0].username} {t("is_typing")}
               </span>
             </>
           ) : (
@@ -600,12 +644,15 @@ export const MessageList = memo(
       );
     }, [isLoadingOlderMessages, t]);
 
+    // Helper to truncate message
+    const getSnippet = (msg: string, max = 60) =>
+      msg.length > max ? msg.slice(0, max) + "…" : msg;
+
     return (
       <div className={messageListStyles({ className })}>
         <div
           className={clsx(
-            "flex-1 overflow-y-auto relative will-change-transform",
-            replyTo || editMessage ? "mb-20" : "mb-6"
+            "flex-1 overflow-y-auto relative will-change-transform"
           )}
           ref={messageContainerRef}
         >
@@ -615,7 +662,7 @@ export const MessageList = memo(
           {/* Load more button (only shown when there are more messages and not currently loading) */}
           {hasMoreMessages &&
             !isLoadingOlderMessages &&
-            messages.length > 0 && (
+            messageDataList.length > 0 && (
               <div className="flex justify-center my-2">
                 <Button
                   size="sm"
@@ -673,59 +720,53 @@ export const MessageList = memo(
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="fixed pb-2 px-4 bottom-0 right-0 left-0 border-t dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900">
-          {replyTo && (
-            <div className="py-2 border-t dark:border-neutral-800 flex items-center justify-between">
-              <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                {t("replying_to", {
-                  user: replyTo.sender.name,
-                  message: replyTo.content,
-                })}
-              </div>
-              <Button variant="ghost" size="sm" onClick={cancelReply}>
-                <FiX />
-              </Button>
+        {/* Reply indicator (now above the input bar) */}
+        {replyTo && (
+          <div className="px-4 pt-2 border-t border-b dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 flex items-center justify-between">
+            <div className="text-sm text-neutral-700 dark:text-neutral-300 truncate">
+              <span className="font-medium text-green-600 dark:text-green-400">
+                {t("replying_to")} {replyTo.sender.name}:
+              </span>
+              <span className="ml-2 text-neutral-500 dark:text-neutral-400">
+                {getSnippet(replyTo.content)}
+              </span>
             </div>
-          )}
+            <Button variant="ghost" size="sm" onClick={cancelReply}>
+              <FiX />
+            </Button>
+          </div>
+        )}
 
-          {editMessage && (
-            <div className="py-2 border-t dark:border-neutral-800 flex items-center justify-between">
-              <div className="text-sm text-amber-600 dark:text-amber-400">
-                {t("editing_message", { message: editMessage.content })}
-              </div>
-              <Button variant="ghost" size="sm" onClick={cancelEdit}>
-                <FiX />
-              </Button>
-            </div>
-          )}
-
-          <form onSubmit={handleSendMessage} className="flex pt-2 gap-2">
+        {/* Message input */}
+        <div className="p-2 pb-0 border-t dark:border-neutral-800">
+          <form onSubmit={handleSendMessage} className="flex gap-2">
             <Input
+              type="text"
               value={newMessage}
               onChange={handleInputChange}
               placeholder={
-                editMessage
-                  ? t("edit_your_message")
-                  : isConnected
-                    ? t("type_a_message")
-                    : t("reconnecting")
+                editMessage ? t("edit_your_message") : t("type_a_message")
               }
               className="flex-1"
-              aria-label={t("message_input")}
               disabled={!isConnected}
-              autoFocus={!!editMessage}
             />
-            <Button
-              type="submit"
-              className="min-w-0"
-              isIconOnly
-              disabled={!newMessage.trim() || !isConnected}
-              aria-label={t("send_message")}
-            >
+            <Button type="submit" disabled={!isConnected || !newMessage.trim()}>
               <BiSolidSend />
             </Button>
           </form>
         </div>
+
+        {/* Edit indicator (if editing) */}
+        {editMessage && (
+          <div className="py-2 pb-0 border-t dark:border-neutral-800 flex items-center justify-between">
+            <div className="text-sm text-amber-600 dark:text-amber-400">
+              {t("editing_message", { message: editMessage.content })}
+            </div>
+            <Button variant="ghost" size="sm" onClick={cancelEdit}>
+              <FiX />
+            </Button>
+          </div>
+        )}
       </div>
     );
   }

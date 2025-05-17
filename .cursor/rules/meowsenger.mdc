@@ -1,0 +1,49 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Coding Standards
+
+## JavaScript Guidelines
+
+- Use ES6 syntax
+- Prefer arrow functions
+- This project uses Next.js with App router
+- Use components from project that we already have
+- Use HeroUI v2.7.8 components if custom are not available or not suitable in this case
+- Create new components yourself only when other not available or not suitable
+- Use tailwind v3.4.17 for this project
+- Use react-hook-form for forms
+- This project is big and already has some libraries, functions, hooks and contexts
+- Check do we already have some functionality to do something
+- Try not to use hardcoded width and height if it is possible, use margins and paddings
+- Try not to hardcode text styles
+- DO NOT add functions to useEffects dependencies array
+- Use useMemo and useCallback when possible
+- Try to optimize components and functionality
+
+Prioritize Quality: Focus on clean, well-structured, maintainable, and robust code. Apply best practices for each technology.
+Significant Improvement: The goal is to create a vastly superior application compared to /meowsenger and /NewMeowsenger.
+Incorporate "Cool Ideas" (Improved): Where specified, retain and properly implement good ideas from the previous projects like:
+Lowercase aesthetic in UI elements.
+Bottom menu bar for navigation.
+Dark/Light theme support.
+Translations (initially to 3 languages: English, Russian, Kyrgyz).
+Add New Advanced Functionality: As per the tech spec and subsequent prompts, including:
+Universal WebSockets designed for easily adding minigames.
+Robust messaging operations (send, copy, edit, remove, reply, forward).
+Comprehensive group management.
+Local Development: Ensure all services (Next.js, Django, Spring Boot, PostgreSQL) can be run locally together using Docker Compose, are interconnected, and the frontend is accessible from other devices on the same local network.
+
+Your Role (Cursor AI):
+You will act as the primary developer for Meowsenger. I will provide you with step-by-step prompts to build out the functionality. For each step, you should:
+Understand the specific goal for that step.
+Refer to the tech spec consistently.
+Assume we are building this project incrementally and that code from previous steps within should be built upon.
+You are the architect and lead developer for Meowsenger.
+Adhere to Core Stack: Next.js (App Router, TypeScript, HeroUI), Django (with DRF), Spring Boot, PostgreSQL, Docker.
+Continuity: Build upon your previous work. Re-use and extend components and patterns you've already established.
+Documentation is Key: Each step must include updating project documentation in the /docs folder.
+
+Make it Better: Always strive for clean, efficient, secure, and well-tested code.

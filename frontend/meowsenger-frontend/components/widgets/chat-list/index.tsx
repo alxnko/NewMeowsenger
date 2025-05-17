@@ -39,19 +39,42 @@ import { translateSystemMessage } from "@/utils/message-utils";
 const OptimizedChatItem: FC<OptimizedChatItemProps> = memo(
   ({ chat, isActive }) => {
     const { t } = useLanguage();
-    
+
     // Format timestamp from lastUpdate string
     const lastUpdate = chat.lastUpdate ? new Date(chat.lastUpdate) : undefined;
 
-    // Extract text from lastMessage object
-    let lastMessageText =
-      typeof chat.lastMessage === "string"
-        ? chat.lastMessage
-        : chat.lastMessage?.text || "";
+    // Extract text and system message details from lastMessage object
+    let lastMessageText = "";
+    let isSystem = false;
+    let systemMessageType = undefined;
+    let systemMessageParams = undefined;
 
-    // If last message is system, translate it
-    if (chat.lastMessage?.isSystem || chat.lastMessage?.author === "System") {
-      lastMessageText = translateSystemMessage(lastMessageText, t);
+    if (typeof chat.lastMessage === "string") {
+      lastMessageText = chat.lastMessage;
+    } else if (chat.lastMessage) {
+      lastMessageText = chat.lastMessage.text || "";
+      isSystem = chat.lastMessage.isSystem || false;
+      systemMessageType = chat.lastMessage.system_message_type;
+      systemMessageParams = chat.lastMessage.system_message_params;
+    }
+
+    // Translate the message if needed
+    if (lastMessageText) {
+      // Always translate system messages, with or without structured data
+      if (isSystem) {
+        lastMessageText = translateSystemMessage(
+          lastMessageText,
+          t,
+          systemMessageType,
+          systemMessageParams
+        );
+      } else if (lastMessageText === "no messages") {
+        // Special case for "no messages"
+        lastMessageText = t("no_messages_short");
+      }
+    } else {
+      // If no message, use the default "no messages" translation
+      lastMessageText = t("no_messages_short");
     }
 
     return (

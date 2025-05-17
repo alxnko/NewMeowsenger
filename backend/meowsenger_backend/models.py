@@ -21,6 +21,25 @@ class User(AbstractUser):
     # Django already has password, username fields
     # Django manages relationships differently, they are defined in other models
 
+    # User preferences
+    language = models.CharField(
+        max_length=5,
+        default="en",
+        choices=[
+            ("en", "English"),
+            ("ru", "Russian"),
+            ("kg", "Kyrgyz"),
+        ],
+    )
+    theme = models.CharField(
+        max_length=10,
+        default="light",
+        choices=[
+            ("light", "Light"),
+            ("dark", "Dark"),
+        ],
+    )
+
     def __str__(self):
         return f"User('{self.username}', '{self.email}', '{self.image_file}')"
 
@@ -46,6 +65,12 @@ class Message(models.Model):
     is_deleted = models.BooleanField(default=False)
     is_edited = models.BooleanField(default=False)
     is_system = models.BooleanField(default=False)
+    system_message_type = models.CharField(
+        max_length=50, null=True, blank=True
+    )  # For storing message type like 'user_added', 'user_removed', etc.
+    system_message_params = models.JSONField(
+        null=True, blank=True
+    )  # For storing parameters for translation like actor, target, etc.
     send_time = models.DateTimeField(default=datetime.now)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")

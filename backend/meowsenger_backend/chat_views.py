@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.response import Response
 
-from .models import Chat, Message, Update, User
+from .models import Chat, Message, Update, User, UserMessage
 
 # Helper functions
 
@@ -69,28 +69,39 @@ def chat_to_block_dict(chat, user):
     last_message = get_last_message(chat.id)
 
     # Check if the user has unread messages
-    is_unread = False
-    if chat.messages.exists():
-        last_msg = chat.messages.order_by("-id").first()
-        is_unread = user in last_msg.unread_by.all()
+    # The UserMessage model doesn't have is_read field - if a record exists, it means the message is unread
+    has_unread = UserMessage.objects.filter(user=user, message__chat=chat).exists()
+
+    # Get the chat's creation time
+    last_time = chat.last_time if chat.last_time else chat.reg_time
+
+    # Format the message for display
+    if last_message:
+        # If this is a system message, preserve its type and params
+        if last_message.is_system:
+            last_message_dict = {
+                "text": last_message.text,
+                "author": last_message.user.username,
+                "isSystem": True,
+                "system_message_type": last_message.system_message_type,
+                "system_message_params": last_message.system_message_params,
+            }
+        else:
+            last_message_dict = {
+                "text": last_message.text,
+                "author": last_message.user.username,
+            }
+    else:
+        last_message_dict = "no messages"
 
     return {
         "id": chat.id,
         "name": name,
-        "secret": chat.secret,
-        "isVerified": is_verified,
-        "isAdmin": target_user.is_staff if target_user else False,
-        "isTester": target_user.is_tester if target_user else False,
-        "lastMessage": {
-            "text": last_message.text if last_message else "no messages",
-            "author": last_message.user.username if last_message else "",
-            "isSystem": last_message.is_system if last_message else False,
-        },
-        "url": chat.id if chat.is_group else name,
-        "type": "g" if chat.is_group else "u",
         "isGroup": chat.is_group,
-        "lastUpdate": chat.last_time,
-        "isUnread": is_unread,
+        "isVerified": is_verified,
+        "lastMessage": last_message_dict,
+        "lastUpdate": last_time,
+        "isUnread": has_unread,
     }
 
 
@@ -137,10 +148,8 @@ def chat_to_dict(chat, user):
             ]
 
     # Check if the user has unread messages
-    is_unread = False
-    if chat.messages.exists():
-        last_msg = chat.messages.order_by("-id").first()
-        is_unread = user in last_msg.unread_by.all()
+    # Check if there are any unread messages for this user in this chat
+    is_unread = UserMessage.objects.filter(user=user, message__chat=chat).exists()
 
     return {
         "id": chat.id,
@@ -188,6 +197,10 @@ def messages_to_arr_from(chat_id, before_id=None, limit=30):
             "isDeleted": msg.is_deleted,
             "isEdited": msg.is_edited,
             "isSystem": msg.is_system,
+            "system_message_type": msg.system_message_type if msg.is_system else None,
+            "system_message_params": (
+                msg.system_message_params if msg.is_system else None
+            ),
             "replyTo": msg.reply_to,
             "isForwarded": msg.is_forwarded,
         }
@@ -368,10 +381,15 @@ def create_group(request):
 
                     # Create a system message to notify that user was added
                     Message.objects.create(
-                        text=f"{member.username} was added to the group by {user.username}",
+                        text=f"{user.username} added {member.username} to the group",
                         user=user,
                         chat=chat,
                         is_system=True,
+                        system_message_type="user_added",
+                        system_message_params={
+                            "actor": user.username,
+                            "target": member.username,
+                        },
                     )
             except User.DoesNotExist:
                 # Skip users that don't exist
@@ -505,9 +523,17 @@ def add_member(request):
         # Add the user
         chat.users.add(target_user)
 
-        # Create system message
+        # Create system message with proper structured data
         msg = Message.objects.create(
-            text=data.get("message"), user=user, chat=chat, is_system=True
+            text=f"{user.username} added {target_user.username} to the group",
+            user=user,
+            chat=chat,
+            is_system=True,
+            system_message_type="user_added",
+            system_message_params={
+                "actor": user.username,
+                "target": target_user.username,
+            },
         )
 
         # Mark as unread for other users
@@ -565,9 +591,17 @@ def remove_member(request):
         # Remove the user
         chat.users.remove(target_user)
 
-        # Create system message
+        # Create system message with proper structured data
         msg = Message.objects.create(
-            text=data.get("message"), user=user, chat=chat, is_system=True
+            text=f"{user.username} removed {target_user.username} from the group",
+            user=user,
+            chat=chat,
+            is_system=True,
+            system_message_type="user_removed",
+            system_message_params={
+                "actor": user.username,
+                "target": target_user.username,
+            },
         )
 
         # Mark as unread for other users
@@ -625,9 +659,17 @@ def add_admin(request):
         # Add the user as admin
         chat.admins.add(target_user)
 
-        # Create system message
+        # Create system message with proper structured data
         msg = Message.objects.create(
-            text=data.get("message"), user=user, chat=chat, is_system=True
+            text=f"{user.username} made {target_user.username} an admin",
+            user=user,
+            chat=chat,
+            is_system=True,
+            system_message_type="admin_added",
+            system_message_params={
+                "actor": user.username,
+                "target": target_user.username,
+            },
         )
 
         # Mark as unread for other users
@@ -665,7 +707,7 @@ def add_admin(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def remove_admin(request):
-    """Remove an admin from a group chat."""
+    """Remove admin status from a group chat user."""
     data = request.data
     user = request.user
 
@@ -681,14 +723,27 @@ def remove_admin(request):
     except User.DoesNotExist:
         return Response({"status": False})
 
-    # Check if it's a group chat and user is the first admin
-    if chat.is_group and chat.admins.all().first() == user:
+    # Check if it's a group chat, user is the first admin, target is an admin
+    if (
+        chat.is_group
+        and chat.admins.all().first() == user
+        and target_user in chat.admins.all()
+        and target_user != user
+    ):
         # Remove the user from admins
         chat.admins.remove(target_user)
 
-        # Create system message
+        # Create system message with proper structured data
         msg = Message.objects.create(
-            text=data.get("message"), user=user, chat=chat, is_system=True
+            text=f"{user.username} removed admin rights from {target_user.username}",
+            user=user,
+            chat=chat,
+            is_system=True,
+            system_message_type="admin_removed",
+            system_message_params={
+                "actor": user.username,
+                "target": target_user.username,
+            },
         )
 
         # Mark as unread for other users
@@ -816,3 +871,66 @@ def get_older_messages(request):
         has_more = Message.objects.filter(chat_id=chat.id, id__lt=oldest_id).exists()
 
     return Response({"status": True, "messages": messages, "has_more": has_more})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_group_settings(request):
+    """Update group chat settings."""
+    data = request.data
+    user = request.user
+
+    # Get the chat
+    try:
+        chat = Chat.objects.get(pk=data.get("from"))
+    except Chat.DoesNotExist:
+        return Response({"status": False}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if it's a group chat and user is an admin
+    if chat.is_group and user in chat.admins.all():
+        # Update chat settings
+        if "name" in data:
+            chat.name = data.get("name")
+
+        # Add other settings as needed
+        chat.save()
+
+        # Create system message with proper structured data
+        msg = Message.objects.create(
+            text=f"{user.username} updated group settings",
+            user=user,
+            chat=chat,
+            is_system=True,
+            system_message_type="group_settings_updated",
+            system_message_params={"actor": user.username},
+        )
+
+        # Mark as unread for other users
+        mark_as_not_read(chat, msg)
+
+        # Update chat's last time
+        chat.last_time = msg.send_time
+        chat.save()
+
+        # Send WebSocket notification about settings change
+        try:
+            import requests
+
+            ws_url = "http://messaging:8081/api/settings-changed"
+            requests.post(
+                ws_url,
+                json={
+                    "chatId": chat.id,
+                    "userId": user.id,
+                    "username": user.username,
+                    "chatName": chat.name,
+                    "description": "Group settings were updated",
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            print(f"Failed to send WebSocket notification: {e}")
+
+        return Response({"status": True})
+
+    return Response({"status": False})

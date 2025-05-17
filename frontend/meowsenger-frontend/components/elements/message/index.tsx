@@ -1,11 +1,11 @@
 import React, { useEffect, useState, memo, useCallback, useMemo } from "react";
 import { tv } from "tailwind-variants";
-import { formatDistance } from "date-fns";
 import { useChat } from "@/contexts/chat-context";
 import clsx from "clsx";
 import { MessageMenu } from "@/components/elements/message-menu";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
+import { formatRelativeTime, translateSystemMessage } from "@/utils/message-utils";
 
 const messageStyles = tv({
   base: "rounded-lg p-3 max-w-[80%] lowercase relative",
@@ -67,48 +67,18 @@ export interface MessageProps {
   isDeleted?: boolean;
   isEdited?: boolean;
   isSystem?: boolean;
+  systemMessageType?: string;
+  systemMessageParams?: Record<string, string | number>;
   replyTo?: number;
+  replyMessage?: {
+    text: string;
+    author: string;
+  };
+  messageId?: number;
   onReply?: () => void;
   onEdit?: () => void;
   className?: string;
 }
-
-// Custom hook to find message info to reduce calculations in the component
-function useMessageInfo(replyTo?: number, content?: string, sender?: string) {
-  const { currentMessages } = useChat();
-
-  // Find the reply message once and memoize it
-  const replyInfo = useMemo(() => {
-    if (!replyTo || !currentMessages)
-      return { replyMessage: null, replyAuthor: null };
-
-    const foundMessage = currentMessages.find((msg) => msg.id === replyTo);
-    if (foundMessage) {
-      return {
-        replyMessage: foundMessage.text,
-        replyAuthor: foundMessage.author,
-      };
-    }
-    return { replyMessage: null, replyAuthor: null };
-  }, [replyTo, currentMessages]);
-
-  // Find the current message ID
-  const messageId = useMemo(() => {
-    if (!content || !sender || !currentMessages) return undefined;
-
-    const foundMessage = currentMessages.find(
-      (msg) => msg.text === content && msg.author === sender
-    );
-    return foundMessage?.id;
-  }, [content, sender, currentMessages]);
-
-  return {
-    ...replyInfo,
-    messageId,
-  };
-}
-
-import { translateSystemMessage } from "@/utils/message-utils";
 
 export const Message = memo(
   ({
@@ -120,7 +90,11 @@ export const Message = memo(
     isDeleted = false,
     isEdited = false,
     isSystem = false,
+    systemMessageType,
+    systemMessageParams,
     replyTo,
+    replyMessage,
+    messageId,
     onReply,
     onEdit,
     className,
@@ -130,20 +104,13 @@ export const Message = memo(
     const { isAdmin } = useAuth();
     const { t } = useLanguage();
 
-    // Use the custom hook to get message data
-    const { replyMessage, replyAuthor, messageId } = useMessageInfo(
-      replyTo,
-      content,
-      sender
-    );
-
     // Memoize the formatted time to avoid unnecessary calculations
     const formattedTime = useMemo(
       () =>
         timestamp
-          ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
+          ? formatRelativeTime(timestamp, t)
           : "",
-      [timestamp]
+      [timestamp, t]
     );
 
     // Memoize event handlers
@@ -173,15 +140,15 @@ export const Message = memo(
       return (
         <div className={replyStyles({ isOwn })}>
           <span className="font-medium text-xs">
-            {replyAuthor === sender
+            {replyMessage.author === sender
               ? t("replying_to_self")
-              : t("reply_to_user", { user: replyAuthor })}
+              : t("reply_to_user", { user: replyMessage.author })}
             :
           </span>
-          <div className="text-xs opacity-75 truncate">{replyMessage}</div>
+          <div className="text-xs opacity-75 truncate">{replyMessage.text}</div>
         </div>
       );
-    }, [replyTo, replyMessage, isSystem, isOwn, replyAuthor, sender, t]);
+    }, [replyTo, replyMessage, isSystem, isOwn, sender, t]);
 
     const senderComponent = useMemo(() => {
       if (isOwn || isSystem) return null;
@@ -240,12 +207,11 @@ export const Message = memo(
         >
           {replyComponent}
           {senderComponent}
-
           <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
             {isDeleted
               ? t("message_deleted")
               : isSystem
-                ? translateSystemMessage(content, t)
+                ? translateSystemMessage(content, t, systemMessageType, systemMessageParams)
                 : content}
           </p>
 

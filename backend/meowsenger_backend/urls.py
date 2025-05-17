@@ -23,7 +23,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .auth_views import RegisterView, LoginView, LogoutView
+from .auth_views import RegisterView, LoginView, LogoutView, UserPreferencesView
 from . import chat_views
 
 
@@ -52,6 +52,7 @@ urlpatterns = [
     path("api/register/", RegisterView.as_view(), name="register"),
     path("api/login/", LoginView.as_view(), name="login"),
     path("api/logout/", LogoutView.as_view(), name="logout"),
+    path("api/preferences/", UserPreferencesView.as_view(), name="user_preferences"),
     # Chat endpoints
     path("api/c/get_chats", chat_views.get_chats, name="get_chats"),
     path("api/c/get_chat", chat_views.get_chat, name="get_chat"),

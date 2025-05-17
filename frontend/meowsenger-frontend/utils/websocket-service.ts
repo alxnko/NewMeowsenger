@@ -1,5 +1,6 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { generateMakeAdminSystemMessage, generateRemoveAdminSystemMessage, generateUpdateSettingsSystemMessage, generateAddUserSystemMessage, generateRemoveUserSystemMessage } from "./system-message-utils";
 
 export interface WebSocketMessage {
   type:
@@ -27,6 +28,10 @@ export interface WebSocketMessage {
   replyTo?: number; // ID of message being replied to
   isForwarded?: boolean; // Whether message is forwarded from another chat
   isRead?: boolean; // Whether message has been read by recipient
+  
+  // Structured system message fields
+  system_message_type?: string; // Type of system message
+  system_message_params?: Record<string, string | number>; // Parameters for system message translation
 
   // Group chat related fields
   isGroup?: boolean; // Whether this is a group chat
@@ -999,7 +1004,6 @@ class WebSocketService {
       body: JSON.stringify(message),
     });
   }
-
   /**
    * Send admin status change notification
    */
@@ -1016,20 +1020,27 @@ class WebSocketService {
       return;
     }
 
+    const actorUsername = 
+      sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
+      
+    // Generate structured system message
+    const systemMsgData = isPromotion
+      ? generateMakeAdminSystemMessage(actorUsername, targetUsername)
+      : generateRemoveAdminSystemMessage(actorUsername, targetUsername);
+
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
       userId: this.userId,
-      username:
-        sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || undefined,
+      username: actorUsername,
       chatId: chatId,
-      content: isPromotion
-        ? `made ${targetUsername} an admin`
-        : `removed admin rights from ${targetUsername}`,
+      content: systemMsgData.content || "",
       timestamp: new Date().toISOString(),
       updateType: "ADMIN_CHANGED",
       targetUserId: targetUserId,
       targetUsername: targetUsername,
       isPromotion: isPromotion,
+      system_message_type: systemMsgData.system_message_type,
+      system_message_params: systemMsgData.system_message_params,
     };
 
     this.client.publish({
@@ -1039,7 +1050,6 @@ class WebSocketService {
 
     console.log("[WebSocket] Sent admin status change request:", message);
   }
-
   /**
    * Send member removed notification
    */
@@ -1055,17 +1065,24 @@ class WebSocketService {
       return;
     }
 
+    const actorUsername = 
+      sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
+      
+    // Generate structured system message
+    const systemMsgData = generateRemoveUserSystemMessage(actorUsername, targetUsername);
+
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
       userId: this.userId,
-      username:
-        sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || undefined,
+      username: actorUsername,
       chatId: chatId,
-      content: `removed ${targetUsername} from the group`,
+      content: systemMsgData.content || "",
       timestamp: new Date().toISOString(),
       updateType: "MEMBER_REMOVED",
       targetUserId: targetUserId,
       targetUsername: targetUsername,
+      system_message_type: systemMsgData.system_message_type,
+      system_message_params: systemMsgData.system_message_params,
     };
 
     this.client.publish({
@@ -1075,7 +1092,6 @@ class WebSocketService {
 
     console.log("[WebSocket] Sent member removal request:", message);
   }
-
   /**
    * Send member added notification
    */
@@ -1091,17 +1107,24 @@ class WebSocketService {
       return;
     }
 
+    const actorUsername = 
+      sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "User";
+      
+    // Generate structured system message
+    const systemMsgData = generateAddUserSystemMessage(actorUsername, targetUsername);
+
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
       userId: this.userId,
-      username:
-        sessionStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || undefined,
+      username: actorUsername,
       chatId: chatId,
-      content: `added ${targetUsername} to the group`,
+      content: systemMsgData.content || "",
       timestamp: new Date().toISOString(),
       updateType: "MEMBER_ADDED",
       targetUserId: targetUserId,
       targetUsername: targetUsername,
+      system_message_type: systemMsgData.system_message_type,
+      system_message_params: systemMsgData.system_message_params,
     };
 
     this.client.publish({
@@ -1128,15 +1151,25 @@ class WebSocketService {
       return;
     }
 
+    // Get the current username to use as the actor
+    const actorUsername = localStorage.getItem(WS_CONSTANTS.STORAGE_KEYS.USERNAME) || "System";
+
+    // Generate a structured system message for settings update
+    const systemMsgData = generateUpdateSettingsSystemMessage(actorUsername);
+
     const message: WebSocketMessage = {
       type: "CHAT_UPDATE",
       userId: this.userId,
       chatId: chatId,
-      content: description,
+      content: systemMsgData.content || description,
       updateMessage: updateMessage,
       timestamp: new Date().toISOString(),
       updateType: "SETTINGS_CHANGED",
       chatName: chatName,
+      // Add structured system message data
+      system_message_type: systemMsgData.system_message_type,
+      system_message_params: systemMsgData.system_message_params,
+      isSystem: true // Mark as system message
     };
 
     this.client.publish({

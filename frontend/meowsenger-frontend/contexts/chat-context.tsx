@@ -30,12 +30,16 @@ export interface ChatMessage {
   isPending?: boolean; // Added for messages in sending state
   isRead?: boolean; // Added for tracking read status
   messageKey?: string; // Added for deduplication
+  system_message_type?: string; // Added for structured system messages
+  system_message_params?: Record<string, string | number>; // Added for structured system message parameters
 }
 
 export interface LastMessage {
   text: string;
   author: string;
   isSystem?: boolean;
+  system_message_type?: string;
+  system_message_params?: Record<string, string | number>;
 }
 
 export interface ChatBlock {
@@ -145,6 +149,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     return () => clearInterval(intervalId);
   }, [currentChat, messageHandler]);
+
+  // Reset messages when chat changes
+  useEffect(() => {
+    if (!currentChat) {
+      setCurrentMessages([]);
+    }
+  }, [currentChat]);
 
   const [recentJoinEvents, setRecentJoinEvents] = useState<Map<string, number>>(
     new Map()
@@ -1088,97 +1099,78 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [token, chats.length, lastUpdate, dispatchChatUpdateEvent]
   );
 
-  const openChat = async (chatIdOrName: string | number) => {
-    if (!token) return;
+  const openChat = useCallback(
+    async (chatId: string | number) => {
+      if (!token) return;
 
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
 
-    // Reset lazy loading state when opening a new chat
-    setHasMoreMessages(true);
-    setIsLoadingOlderMessages(false);
-    oldestMessageIdRef.current = null;
+      try {
+        // Reset lazy loading state when opening a new chat
+        setHasMoreMessages(true);
+        setIsLoadingOlderMessages(false);
+        oldestMessageIdRef.current = null;
 
-    try {
-      let response;
-
-      // If it's a number, it's a group chat ID
-      if (typeof chatIdOrName === "number") {
-        // Use the updated API with limit parameter to get only the initial batch of messages
-        response = await chatApi.getGroup(
-          token,
-          chatIdOrName,
-          MESSAGES_BATCH_SIZE
+        let response;
+        // Determine if this is a group chat (number or group type)
+        const chatBlock = chats.find(
+          (c) => c.id === chatId || c.url === chatId
         );
-      } else {
-        // Get only the initial batch of messages for direct chat
-        response = await chatApi.getChat(
-          token,
-          chatIdOrName,
-          MESSAGES_BATCH_SIZE
-        );
-      }
-
-      if (response.status) {
-        setCurrentChat(response.chat);
-
-        // Store the initial messages
-        const initialMessages = response.messages || [];
-        setCurrentMessages(initialMessages);
-
-        // Set the oldest message ID for pagination if we have messages
-        if (initialMessages.length > 0) {
-          // Find the oldest message by ID
-          const oldestMsg = initialMessages.reduce(
-            (oldest, current) => (oldest.id < current.id ? oldest : current),
-            initialMessages[0]
+        if (
+          typeof chatId === "number" ||
+          (chatBlock && (chatBlock.isGroup || chatBlock.type === "g"))
+        ) {
+          // Group chat
+          response = await chatApi.getGroup(
+            token,
+            Number(chatId),
+            MESSAGES_BATCH_SIZE
           );
-          oldestMessageIdRef.current = oldestMsg.id;
-
-          // Use the has_more flag from the API response
-          setHasMoreMessages(response.has_more || false);
         } else {
-          setHasMoreMessages(false);
-        }
-
-        // Subscribe to WebSocket updates for this chat if WebSocket is connected
-        if (wsConnected && user) {
-          websocketService.subscribeToChatRoom(
-            response.chat.id,
-            handleWebSocketMessage
+          // Private chat
+          response = await chatApi.getChat(
+            token,
+            chatId.toString(),
+            MESSAGES_BATCH_SIZE
           );
         }
-      } else {
-        setError("Failed to open chat");
+
+        if (response.status) {
+          setCurrentChat(response.chat);
+          setCurrentMessages(response.messages || []);
+
+          // Set the oldest message ID for pagination if we have messages
+          if (response.messages && response.messages.length > 0) {
+            oldestMessageIdRef.current = response.messages[0].id;
+            setHasMoreMessages(response.has_more || false);
+          } else {
+            setHasMoreMessages(false);
+          }
+
+          // Subscribe to WebSocket updates for this chat if WebSocket is connected
+          if (wsConnected && user) {
+            websocketService.subscribeToChatRoom(
+              response.chat.id,
+              handleWebSocketMessage
+            );
+          }
+        } else {
+          setError("Failed to load chat");
+          setCurrentChat(null);
+          setCurrentMessages([]);
+        }
+      } catch (error) {
+        console.error("Error opening chat:", error);
+        setError("Failed to load chat");
+        setCurrentChat(null);
+        setCurrentMessages([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Error opening chat:", err);
-
-      // Check if it's a 404 error (user not found)
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to open chat";
-      const is404 =
-        errorMessage.includes("404") ||
-        errorMessage.includes("User not found") ||
-        errorMessage.toLowerCase().includes("not exist");
-
-      if (is404 && typeof chatIdOrName === "string") {
-        // Create a user-friendly error message
-        const notFoundMessage = `User "${chatIdOrName}" doesn't exist.`;
-
-        // Show the error toast
-        showToast(notFoundMessage, "error");
-
-        // Redirect to /chats page
-        router.push("/chats");
-      } else {
-        // For other errors, just set the error state
-        setError(errorMessage);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [token, wsConnected, user, handleWebSocketMessage, chats]
+  );
 
   // Load older messages function for lazy loading
   const loadOlderMessages = async (): Promise<boolean> => {

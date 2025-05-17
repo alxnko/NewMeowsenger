@@ -151,6 +151,26 @@ export const authApi = {
       method: "POST",
       token,
     }),
+
+  // Get user preferences
+  getUserPreferences: (
+    token: string
+  ): Promise<{ language: string; theme: string }> =>
+    apiFetch<{ language: string; theme: string }>("/api/preferences/", {
+      method: "GET",
+      token,
+    }),
+
+  // Update user preferences
+  updateUserPreferences: (
+    token: string,
+    preferences: { language?: string; theme?: string }
+  ): Promise<{ language: string; theme: string }> =>
+    apiFetch<{ language: string; theme: string }>("/api/preferences/", {
+      method: "PUT",
+      body: preferences,
+      token,
+    }),
 };
 
 // Chat API calls

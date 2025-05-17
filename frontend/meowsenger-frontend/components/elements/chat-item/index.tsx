@@ -1,7 +1,11 @@
 import React, { memo } from "react";
 import { tv } from "tailwind-variants";
 import Link from "next/link";
-import { formatDistance } from "date-fns";
+import { useLanguage } from "@/contexts/language-context";
+import {
+  formatRelativeTime,
+  translateSystemMessage,
+} from "@/utils/message-utils";
 
 const chatItemStyles = tv({
   base: "flex items-center p-3 rounded-lg transition-all hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer lowercase",
@@ -43,13 +47,17 @@ export const ChatItem = memo(
     isUnread = false,
     className,
   }: ChatItemProps) => {
-    const formattedTime = timestamp
-      ? formatDistance(new Date(timestamp), new Date(), { addSuffix: true })
-      : "";
+    const { t } = useLanguage();
+    const formattedTime = timestamp ? formatRelativeTime(timestamp, t) : "";
+
+    // Translate the last message if needed (for system messages)
+    const translatedLastMessage = lastMessage
+      ? translateSystemMessage(lastMessage, t)
+      : t("no_messages_short");
 
     return (
       <Link
-        href={`/chats/${isGroup ? "group" : "user"}/${id}`}
+        href={`/chats/${isGroup ? `group/${id}` : `user/${name}`}`}
         className={chatItemStyles({ active, isUnread, className })}
       >
         <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-200 flex items-center justify-center text-green-800">
@@ -67,14 +75,12 @@ export const ChatItem = memo(
                 {formattedTime}
               </p>
             )}
-          </div>
-          {lastMessage && (
-            <p
-              className={`text-xs text-neutral-500 dark:text-neutral-400 truncate ${isUnread ? "text-neutral-700 dark:text-neutral-300" : ""}`}
-            >
-              {lastMessage}
-            </p>
-          )}
+          </div>{" "}
+          <p
+            className={`text-xs text-neutral-500 dark:text-neutral-400 truncate ${isUnread ? "text-neutral-700 dark:text-neutral-300" : ""}`}
+          >
+            {translatedLastMessage}
+          </p>
         </div>
       </Link>
     );
