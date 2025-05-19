@@ -36,12 +36,12 @@ export default function RootLayout({
       <head />
       <body
         className={clsx(
-          "min-h-screen bg-background font-sans antialiased",
+          "min-h-[100dvh] bg-background font-sans antialiased",
           fontMono.className
         )}
       >
         <Providers themeProps={{ attribute: "class" }}>
-          <div className="relative flex flex-col h-screen">
+          <div className="relative flex flex-col h-[100dvh]">
             <main className="flex-grow">{children}</main>
             <NavBar />
           </div>

@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { authApi, AuthResponse, AUTH_ERROR_EVENT } from "@/utils/api-client";
 import { useToast } from "./toast-context";
 import * as tokenManager from "@/utils/token-manager";
+import { useLanguage } from "./language-context";
 
 export interface User {
   id: number;
@@ -65,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<ValidationErrors | null>(null);
   const router = useRouter();
   const { showToast } = useToast();
+  const { t } = useLanguage();
 
   // Initialize token manager and load user on initial mount
   useEffect(() => {
@@ -155,12 +157,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    // Clear errors only when explicitly submitting the form
-    clearErrors();
     setLoading(true);
+    clearErrors();
 
     try {
-      const response = await authApi.login(username, password);
+      // Convert username to lowercase
+      const response = await authApi.login(username.toLowerCase(), password);
 
       if (response && response.token) {
         setUser(response.user);
@@ -171,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         router.push("/chats");
       } else {
-        setError("Invalid login response");
+        setError(t("error_authentication_failed"));
       }
     } catch (err) {
       if (err instanceof Error) {
@@ -182,21 +184,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const errors: ValidationErrors = {};
           errParts.forEach((part) => {
-            const [field, message] = part.split(": ");
-            errors[field] = message;
+            const colonIndex = part.indexOf(": ");
+            if (colonIndex === -1) {
+              errors["general"] = part;
+              return;
+            }
+
+            const field = part.substring(0, colonIndex);
+            const errorMsg = part.substring(colonIndex + 2);
+            errors[field] = errorMsg;
           });
 
           setValidationErrors(errors);
-          // Create a more descriptive error message showing specific validation issues
-          const errorSummary = Object.entries(errors)
-            .map(([_, message]) => `${message}`)
-            .join(", ");
-          setError(`${errorSummary}`);
+
+          // Use translated error messages
+          if (errors.username) {
+            setError(t("error_invalid_credentials"));
+          } else if (errors.password) {
+            setError(t("error_invalid_credentials"));
+          } else {
+            setError(t("error_authentication_failed"));
+          }
+        } else if (
+          err.message.includes("Invalid username or password") ||
+          err.message.includes("401")
+        ) {
+          setError(t("error_invalid_credentials"));
+        } else if (err.message.includes("API error: 500")) {
+          setError(t("error_server"));
         } else {
           setError(err.message);
         }
       } else {
-        setError("Login failed");
+        setError(t("error_authentication_failed"));
       }
     } finally {
       setLoading(false);
@@ -207,9 +227,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     clearErrors();
 
-    // Add default description if not provided
+    // Convert username to lowercase
     const dataToSend = {
       ...userData,
+      username: userData.username.toLowerCase(),
       description: userData.description || "default",
     };
 
@@ -225,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         router.push("/chats");
       } else {
-        setError("Invalid registration response");
+        setError(t("error_registration_failed"));
       }
     } catch (err) {
       if (err instanceof Error) {
@@ -236,20 +257,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const errors: ValidationErrors = {};
           errParts.forEach((part) => {
-            const [field, message] = part.split(": ");
-            errors[field] = message;
+            // Parse field and message from each error part
+            const colonIndex = part.indexOf(": ");
+            if (colonIndex === -1) {
+              // If no colon, treat as a general error
+              errors["general"] = part;
+              return;
+            }
+
+            const field = part.substring(0, colonIndex);
+            const errorMsg = part.substring(colonIndex + 2); // +2 to skip ': '
+
+            // Store the original message
+            errors[field] = errorMsg;
           });
 
           setValidationErrors(errors);
-          const errorSummary = Object.entries(errors)
-            .map(([_, message]) => `${message}`)
-            .join(", ");
-          setError(`${errorSummary}`);
+
+          // Create a clear, user-friendly translated error summary
+          let errorSummary: string;
+
+          if (
+            errors.password &&
+            typeof errors.password === "string" &&
+            errors.password.includes("too short")
+          ) {
+            errorSummary = t("password_too_short");
+          } else if (
+            errors.password &&
+            typeof errors.password === "string" &&
+            errors.password.includes("too common")
+          ) {
+            errorSummary = t("password_too_common");
+          } else if (
+            errors.password &&
+            typeof errors.password === "string" &&
+            errors.password.includes("entirely numeric")
+          ) {
+            errorSummary = t("password_entirely_numeric");
+          } else if (
+            errors.password &&
+            typeof errors.password === "string" &&
+            errors.password.includes("similar to")
+          ) {
+            errorSummary = t("password_similar_to_personal");
+          } else if (errors.password2) {
+            errorSummary = t("passwords_dont_match");
+          } else if (
+            errors.username &&
+            typeof errors.username === "string" &&
+            errors.username.includes("already exists")
+          ) {
+            errorSummary = t("username_taken");
+          } else if (errors.password) {
+            errorSummary =
+              typeof errors.password === "string"
+                ? errors.password
+                : Array.isArray(errors.password)
+                ? errors.password.join(", ")
+                : String(errors.password);
+          } else if (errors.username) {
+            errorSummary =
+              typeof errors.username === "string"
+                ? errors.username
+                : Array.isArray(errors.username)
+                ? errors.username.join(", ")
+                : String(errors.username);
+          } else {
+            // Fallback to generic error
+            errorSummary = t("error_registration_failed");
+          }
+
+          setError(errorSummary);
         } else {
-          setError(err.message);
+          // For non-validation errors, provide a user-friendly translated message
+          if (err.message.includes("API error: 400")) {
+            setError(t("error_registration_failed"));
+          } else if (err.message.includes("API error: 500")) {
+            setError(t("error_server"));
+          } else {
+            setError(err.message);
+          }
         }
       } else {
-        setError("Registration failed");
+        setError(t("error_registration_failed"));
       }
     } finally {
       setLoading(false);

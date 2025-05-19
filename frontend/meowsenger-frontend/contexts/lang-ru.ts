@@ -31,6 +31,19 @@ const ru = {
   create_account_to_start_messaging: "создайте аккаунт чтобы начать общение",
   creating_account: "создание аккаунта...",
   logging_in: "вход в систему...",
+  // Сообщения об ошибках авторизации
+  error_password_too_short: "пароль должен быть не менее 8 символов",
+  error_password_too_common: "пароль не должен быть слишком распространенным",
+  error_password_entirely_numeric: "пароль не может состоять только из цифр",
+  error_password_similar_to_personal:
+    "пароль не должен быть похож на личную информацию",
+  error_passwords_dont_match: "пароли не совпадают",
+  error_username_taken: "это имя пользователя уже занято",
+  error_invalid_credentials: "неверное имя пользователя или пароль",
+  error_authentication_failed: "ошибка аутентификации, попробуйте еще раз",
+  error_registration_failed:
+    "ошибка регистрации, проверьте введенные данные и попробуйте снова",
+  error_server: "ошибка сервера, пожалуйста, попробуйте позже",
   // Профиль
   edit_profile: "редактировать профиль",
   save: "сохранить",
@@ -208,6 +221,13 @@ const ru = {
     "эти настройки не будут сохранены, пока вы не войдете в систему. мы автоматически определили настройки вашего устройства.",
   accept_and_continue: "принять и продолжить",
   not_available_now: "сейчас недоступно",
+  password_too_short: "пароль должен быть не менее 8 символов",
+  password_too_common: "пароль не должен быть слишком распространенным",
+  password_entirely_numeric: "пароль не может состоять только из цифр",
+  password_similar_to_personal:
+    "пароль не должен быть похож на личную информацию",
+  passwords_dont_match: "пароли не совпадают",
+  username_taken: "это имя пользователя уже занято",
 };
 
 export default ru;

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import {
-  Modal,
   ModalContent,
   ModalHeader,
   ModalBody,
   ModalFooter,
-} from "@heroui/modal";
+} from "@/components/elements/modal";
+import { Modal } from "@/components/elements/modal";
 import { Button } from "@heroui/button";
 import { useLanguage } from "@/contexts/language-context";
 import LanguageSelector from "@/components/widgets/language-selector";
@@ -87,95 +87,86 @@ export const CookieConsent: React.FC = () => {
     <Modal
       isOpen={isOpen}
       hideCloseButton
-      onClose={() => {}} // Empty function to prevent closing by escape/clicking outside
+      onOpenChange={() => {}} // Empty function to prevent closing by escape/clicking outside
       isDismissable={false} // Cannot be dismissed
-      backdrop="blur"
       className="lowercase z-[100]"
-      placement="top"
+      title={t("cookie_consent")}
     >
-      <ModalContent>
-        <ModalHeader className="flex flex-col">
-          <h3 className="text-xl font-medium lowercase">
-            {t("cookie_consent")}
-          </h3>
-        </ModalHeader>
-        <ModalBody>
-          {!endpointsAvailable && (
-            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-2 flex items-center text-sm">
-              <FiAlertTriangle className="text-red-500 mr-2" />
-              <p className="text-red-600 dark:text-red-400">
-                authentication server unavailable. secure storage may not work
-                correctly.
-              </p>
-            </div>
-          )}
-
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            {t("cookie_consent_description")}
+      {!endpointsAvailable && (
+        <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-2 flex items-center text-sm">
+          <FiAlertTriangle className="text-red-500 mr-2" />
+          <p className="text-red-600 dark:text-red-400">
+            authentication server unavailable. secure storage may not work
+            correctly.
           </p>
+        </div>
+      )}
 
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <h4 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">
-              {t("cookies_we_use")}
-            </h4>
-            <ul className="text-xs text-neutral-600 dark:text-neutral-300 ml-2 list-disc list-inside space-y-1">
-              <li>{t("auth_cookies")}</li>
-              <li>{t("preference_cookies")}</li>
-              <li>{t("functional_cookies")}</li>
-            </ul>
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        {t("cookie_consent_description")}
+      </p>
+
+      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">
+          {t("cookies_we_use")}
+        </h4>
+        <ul className="text-xs text-neutral-600 dark:text-neutral-300 ml-2 list-disc list-inside space-y-1">
+          <li>{t("auth_cookies")}</li>
+          <li>{t("preference_cookies")}</li>
+          <li>{t("functional_cookies")}</li>
+        </ul>
+      </div>
+
+      <div>
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-sm font-medium mb-1">
+              {t("select_your_language")}
+            </p>
+            <LanguageSelector />
+            <p className="text-xs text-neutral-500">
+              {t("auto_detected_language")}
+            </p>
           </div>
 
           <div>
-            <div className="flex flex-col gap-4">
-              <div>
-                <p className="text-sm font-medium mb-1">
-                  {t("select_your_language")}
-                </p>
-                <LanguageSelector />
-                <p className="text-xs text-neutral-500">
-                  {t("auto_detected_language")}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium mb-1">{t("select_theme")}</p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    isIconOnly
-                    variant="flat"
-                    onPress={toggleTheme}
-                    className="lowercase"
-                    color={theme === "light" ? "primary" : "default"}
-                  >
-                    <FaSun className="text-amber-500" />
-                  </Button>
-                  <Button
-                    isIconOnly
-                    variant="flat"
-                    onPress={toggleTheme}
-                    className="lowercase"
-                    color={theme === "dark" ? "primary" : "default"}
-                  >
-                    <FaMoon className="text-indigo-400" />
-                  </Button>
-                  <p className="text-xs text-neutral-500 ml-1">
-                    {t("auto_detected_theme")}
-                  </p>
-                </div>
-              </div>
+            <p className="text-sm font-medium mb-1">{t("select_theme")}</p>
+            <div className="flex items-center gap-1">
+              <Button
+                isIconOnly
+                variant="flat"
+                onPress={toggleTheme}
+                className="lowercase"
+                color={theme === "light" ? "primary" : "default"}
+              >
+                <FaSun className="text-amber-500" />
+              </Button>
+              <Button
+                isIconOnly
+                variant="flat"
+                onPress={toggleTheme}
+                className="lowercase"
+                color={theme === "dark" ? "primary" : "default"}
+              >
+                <FaMoon className="text-indigo-400" />
+              </Button>
+              <p className="text-xs text-neutral-500 ml-1">
+                {t("auto_detected_theme")}
+              </p>
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button
-            color="success"
-            onPress={handleAccept}
-            className="w-full lowercase"
-          >
-            {t("accept_and_continue")}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
+        </div>
+      </div>
+
+      <ModalFooter>
+        <Button
+          color="success"
+          onPress={handleAccept}
+          className="w-full lowercase"
+        >
+          {t("accept_and_continue")}
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 };

@@ -10,7 +10,7 @@ export default function Container({
     <section
       id={id}
       className={clsx(
-        "flex flex-col items-center justify-center gap-4 py-8 md:py-10 min-h-screen",
+        "flex flex-col items-center justify-center gap-4 py-8 md:py-10 min-h-[100dvh]",
         className
       )}
     >

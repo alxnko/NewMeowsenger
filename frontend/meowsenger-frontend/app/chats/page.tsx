@@ -124,10 +124,14 @@ export default function ChatsPage() {
     username: string
   ): Promise<boolean> => {
     try {
+      // Username should already be lowercase from the modal component
+      // but let's make sure it is lowercase when we use it here too
+      const lowercaseUsername = username.toLowerCase();
+
       // Open a direct chat with the username
-      await openChat(username);
+      await openChat(lowercaseUsername);
       // Navigate to the chat page
-      router.push(`/chats/user/${username}`);
+      router.push(`/chats/user/${lowercaseUsername}`);
       return true;
     } catch (error) {
       // Return false to indicate failure, the error will be caught and displayed in the modal
@@ -141,8 +145,13 @@ export default function ChatsPage() {
     usernames: string[]
   ): Promise<boolean> => {
     try {
+      // Ensure all usernames are lowercase
+      const lowercaseUsernames = usernames.map((username) =>
+        username.toLowerCase()
+      );
+
       // Create a group chat with the members
-      const response = await createGroup(name, usernames);
+      const response = await createGroup(name, lowercaseUsernames);
 
       if (response && response.id) {
         // Refresh the chat list
@@ -168,7 +177,7 @@ export default function ChatsPage() {
 
   if (authLoading || (chatsLoading && chats.length === 0)) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-[100dvh] items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
@@ -181,7 +190,7 @@ export default function ChatsPage() {
 
   return (
     <ProtectedRoute authRequired={true}>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-[100dvh]">
         <div className="flex justify-between items-center p-4 border-b dark:border-neutral-800">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-medium">{t("chats")}</h1>

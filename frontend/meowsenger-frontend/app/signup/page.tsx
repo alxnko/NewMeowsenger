@@ -55,7 +55,7 @@ export default function SignupPage() {
 
   return (
     <ProtectedRoute authRedirect={true}>
-      <div className="flex items-center justify-center min-h-screen bg-background px-4">
+      <div className="flex items-center justify-center min-h-[100dvh] bg-background px-4">
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="flex flex-col gap-1 items-center pb-2">
             <h1 className="text-2xl font-semibold text-center lowercase">
@@ -95,6 +95,7 @@ export default function SignupPage() {
                   classNames={{
                     label: "lowercase text-sm",
                     input: "lowercase",
+                    errorMessage: "text-sm text-red-500",
                   }}
                 />
 
@@ -118,7 +119,9 @@ export default function SignupPage() {
                   classNames={{
                     label: "lowercase text-sm",
                     input: "lowercase",
+                    errorMessage: "text-sm text-red-500",
                   }}
+                  description="Password must be at least 8 characters and contain a mix of letters and numbers"
                 />
 
                 <Input
@@ -141,6 +144,7 @@ export default function SignupPage() {
                   classNames={{
                     label: "lowercase text-sm",
                     input: "lowercase",
+                    errorMessage: "text-sm text-red-500",
                   }}
                 />
               </div>

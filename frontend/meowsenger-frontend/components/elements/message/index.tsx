@@ -198,8 +198,12 @@ export const Message = memo(
       return (
         <div
           className={clsx(
-            "absolute top-0 group-hover:opacity-100 transition-opacity",
-            isOwn ? "left-[-36px]" : "right-[-36px]"
+            "absolute top-0 z-20",
+            // Improved mobile visibility with touch-specific classes
+            "opacity-0 hover:opacity-100 touch:opacity-100",
+            // Increased touch target and positioning
+            "w-10 h-10 flex items-center justify-center",
+            isOwn ? "left-[-40px]" : "right-[-40px]"
           )}
         >
           <MessageMenu
@@ -228,7 +232,12 @@ export const Message = memo(
 
     return (
       <>
-        <div className={clsx("flex flex-col mb-4", isOwn ? "mr-4" : "ml-4")}>
+        <div
+          className={clsx(
+            "flex flex-col mb-4 relative",
+            isOwn ? "mr-4" : "ml-4"
+          )}
+        >
           <div
             className={messageStyles({
               isOwn,
@@ -246,13 +255,13 @@ export const Message = memo(
               {isDeleted
                 ? t("message_deleted")
                 : isSystem
-                  ? translateSystemMessage(
-                      content,
-                      t,
-                      systemMessageType,
-                      systemMessageParams
-                    )
-                  : content}
+                ? translateSystemMessage(
+                    content,
+                    t,
+                    systemMessageType,
+                    systemMessageParams
+                  )
+                : content}
             </p>
 
             {!isSystem && (

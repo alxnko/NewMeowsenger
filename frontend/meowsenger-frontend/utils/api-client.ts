@@ -98,24 +98,89 @@ export async function apiFetch<T = any>(
 
       // Format error message with more details
       let errorMessage = `API error: ${response.status}`;
+
+      // For user-friendly password error messages
+      const handlePasswordErrors = (errors: any): string[] => {
+        const passwordErrors: string[] = [];
+        if (errors.password) {
+          const errMsgs: any[] = Array.isArray(errors.password)
+            ? errors.password
+            : [errors.password];
+
+          // Process each password error with user-friendly messages
+          errMsgs.forEach((msg: any) => {
+            // Common Django password validation errors
+            if (typeof msg === "string" && msg.includes("too short")) {
+              passwordErrors.push("password_too_short");
+            } else if (typeof msg === "string" && msg.includes("too common")) {
+              passwordErrors.push("password_too_common");
+            } else if (
+              typeof msg === "string" &&
+              msg.includes("entirely numeric")
+            ) {
+              passwordErrors.push("password_entirely_numeric");
+            } else if (typeof msg === "string" && msg.includes("similar to")) {
+              passwordErrors.push("password_similar_to_personal");
+            } else {
+              // For other error messages, preserve the original message
+              passwordErrors.push(typeof msg === "string" ? msg : String(msg));
+            }
+          });
+        }
+        return passwordErrors;
+      };
+
+      // Handle different error response formats
       if (errorData.detail) {
-        errorMessage += ` - ${errorData.detail}`;
+        errorMessage = errorData.detail;
       } else if (errorData.error) {
-        errorMessage += ` - ${errorData.error}`;
+        errorMessage = errorData.error;
       } else if (errorData.message) {
-        errorMessage += ` - ${errorData.message}`;
+        errorMessage = errorData.message;
+      } else if (errorData.non_field_errors) {
+        // Django REST framework often returns non_field_errors for form-wide errors
+        errorMessage = Array.isArray(errorData.non_field_errors)
+          ? errorData.non_field_errors.join(", ")
+          : errorData.non_field_errors;
       }
 
       // For validation errors, format them in a more structured way
-      if (errorData.errors) {
+      if (
+        errorData.password ||
+        errorData.username ||
+        errorData.password2 ||
+        errorData.errors
+      ) {
         const validationErrors: string[] = [];
-        Object.entries(errorData.errors).forEach(([field, messages]) => {
+
+        // Handle password errors specially for better messages
+        const passwordErrors = handlePasswordErrors(errorData);
+        if (passwordErrors.length > 0) {
+          passwordErrors.forEach((err) =>
+            validationErrors.push(`password: ${err}`)
+          );
+        }
+
+        // Handle other field errors
+        Object.entries(errorData).forEach(([field, messages]) => {
+          // Skip password field as we handled it separately
+          if (field === "password") return;
+
           if (Array.isArray(messages)) {
             messages.forEach((msg) =>
               validationErrors.push(`${field}: ${msg}`)
             );
           } else if (typeof messages === "string") {
             validationErrors.push(`${field}: ${messages}`);
+          } else if (typeof messages === "object" && messages !== null) {
+            // Handle nested error objects
+            Object.entries(messages as Record<string, any>).forEach(
+              ([subField, subMsg]) => {
+                const displayField =
+                  subField === "" ? field : `${field}.${subField}`;
+                validationErrors.push(`${displayField}: ${subMsg}`);
+              }
+            );
           }
         });
 

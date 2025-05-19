@@ -31,6 +31,26 @@ const en = {
   create_account_to_start_messaging: "create an account to start messaging",
   creating_account: "creating account...",
   logging_in: "logging in...",
+  // Auth error messages
+  error_password_too_short: "password must be at least 8 characters long",
+  error_password_too_common: "password can't be a commonly used password",
+  error_password_entirely_numeric: "password cannot be entirely numeric",
+  error_password_similar_to_personal:
+    "password can't be too similar to your personal information",
+  error_passwords_dont_match: "passwords don't match",
+  error_username_taken: "username is already taken",
+  error_invalid_credentials: "invalid username or password",
+  error_authentication_failed: "authentication failed, please try again",
+  error_registration_failed:
+    "registration failed, please check your information and try again",
+  error_server: "server error, please try again later",
+  password_too_short: "password must be at least 8 characters long",
+  password_too_common: "password can't be a commonly used password",
+  password_entirely_numeric: "password cannot be entirely numeric",
+  password_similar_to_personal:
+    "password can't be too similar to your personal information",
+  passwords_dont_match: "passwords don't match",
+  username_taken: "username is already taken",
   // Profile page
   edit_profile: "edit profile",
   save: "save",

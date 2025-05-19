@@ -9,12 +9,12 @@ import Button from "@/components/elements/button";
 import { Input } from "@/components/elements/input";
 import { GrTest } from "react-icons/gr";
 import {
-  Modal,
   ModalContent,
   ModalHeader,
   ModalBody,
   ModalFooter,
-} from "@heroui/modal";
+  Modal,
+} from "@/components/elements/modal";
 import {
   FiShield,
   FiSettings,
@@ -470,10 +470,10 @@ export default function GroupChatPage() {
               {userActionType === "add"
                 ? t("add_user")
                 : userActionType === "remove"
-                  ? t("remove_user")
-                  : userActionType === "promote"
-                    ? t("make_admin")
-                    : t("remove_admin")}
+                ? t("remove_user")
+                : userActionType === "promote"
+                ? t("make_admin")
+                : t("remove_admin")}
             </ModalHeader>
             <ModalBody>
               {userActionType === "add" ? (
@@ -492,8 +492,8 @@ export default function GroupChatPage() {
                   {userActionType === "remove"
                     ? t("remove")
                     : userActionType === "promote"
-                      ? t("make_admin")
-                      : t("remove_admin_status_from")}{" "}
+                    ? t("make_admin")
+                    : t("remove_admin_status_from")}{" "}
                   <span className="font-bold">{selectedUser}</span>?
                 </p>
               )}
