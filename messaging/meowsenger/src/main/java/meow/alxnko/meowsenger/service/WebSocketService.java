@@ -17,6 +17,8 @@ import meow.alxnko.meowsenger.model.WebSocketMessage;
 import meow.alxnko.meowsenger.repository.ChatRepository;
 import meow.alxnko.meowsenger.repository.MessageRepository;
 import meow.alxnko.meowsenger.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessageSendingOperations;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -25,12 +27,16 @@ import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Service for WebSocket operations
+ * Enhanced with Cloud Run compatibility
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class WebSocketService {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final SimpMessageSendingOperations messagingTemplate;
     private final ChatRepository chatRepository;
     private final UserRepository userRepository;
     private final MessageService messageService;
@@ -43,6 +49,9 @@ public class WebSocketService {
     private final Map<Long, Map<Long, String>> userChatSessions = new ConcurrentHashMap<>();
     // Map to track typing status
     private final Map<Long, Map<Long, LocalDateTime>> userTypingStatus = new ConcurrentHashMap<>();
+    
+    @Value("${spring.profiles.active:default}")
+    private String activeProfile;
     
     /**
      * Register a new WebSocket session for a user
@@ -908,5 +917,112 @@ public class WebSocketService {
         } catch (Exception e) {
             log.error("Error sending admin status change notification: {}", e.getMessage());
         }
+    }
+    
+    /**
+     * Send a message to a specific chat room
+     */
+    public void sendMessage(WebSocketMessage message) {
+        String destination = getTopicDestination(message.getChatId());
+        log.debug("Sending message to {}: {}", destination, message);
+        
+        try {
+            messagingTemplate.convertAndSend(destination, message);
+            log.debug("Message sent successfully to {}", destination);
+        } catch (Exception e) {
+            log.error("Failed to send message to {}: {}", destination, e.getMessage());
+        }
+    }
+    
+    /**
+     * Send a typing indicator to a specific chat room
+     */
+    public void sendTypingIndicator(WebSocketMessage message) {
+        String destination = getTypingDestination(message.getChatId());
+        log.debug("Sending typing indicator to {}: {}", destination, message);
+        
+        try {
+            messagingTemplate.convertAndSend(destination, message);
+            log.debug("Typing indicator sent successfully to {}", destination);
+        } catch (Exception e) {
+            log.error("Failed to send typing indicator to {}: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send a message to a specific user
+     * Enhanced to be more resilient in Cloud Run environment
+     */
+    public void sendPrivateMessage(WebSocketMessage message, Long userId) {
+        String destination = getPrivateDestination(userId);
+        log.debug("Sending private message to {}: {}", destination, message);
+        
+        try {
+            // Add retry logic for Cloud Run environment
+            if ("prod".equals(activeProfile)) {
+                sendWithRetry(destination, message);
+            } else {
+                messagingTemplate.convertAndSendToUser(userId.toString(), 
+                                                      "/queue/messages", 
+                                                      message);
+            }
+            log.debug("Private message sent successfully to user {}", userId);
+        } catch (Exception e) {
+            log.error("Failed to send private message to user {}: {}", userId, e.getMessage());
+        }
+    }
+    
+    /**
+     * Send with retry logic for Cloud Run environment
+     */
+    private void sendWithRetry(String destination, WebSocketMessage message) {
+        int maxRetries = 3;
+        int retryCount = 0;
+        boolean sent = false;
+        
+        while (!sent && retryCount < maxRetries) {
+            try {
+                messagingTemplate.convertAndSend(destination, message);
+                sent = true;
+                log.debug("Message sent successfully to {} on attempt {}", destination, retryCount + 1);
+            } catch (Exception e) {
+                retryCount++;
+                log.warn("Failed to send message to {} on attempt {}: {}", 
+                        destination, retryCount, e.getMessage());
+                
+                if (retryCount < maxRetries) {
+                    try {
+                        Thread.sleep(500 * retryCount); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+        
+        if (!sent) {
+            log.error("Failed to send message to {} after {} attempts", destination, maxRetries);
+        }
+    }
+    
+    /**
+     * Get topic destination for a chat room
+     */
+    public String getTopicDestination(Long chatId) {
+        return "/topic/chat." + chatId;
+    }
+    
+    /**
+     * Get typing destination for a chat room
+     */
+    public String getTypingDestination(Long chatId) {
+        return "/topic/typing." + chatId;
+    }
+    
+    /**
+     * Get private destination for a user
+     */
+    public String getPrivateDestination(Long userId) {
+        return "/user/" + userId + "/queue/messages";
     }
 }

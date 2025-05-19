@@ -28,8 +28,19 @@ RUN groupadd -r appuser && useradd --create-home -r -g appuser appuser
 COPY --chown=appuser:appuser ./meowsenger_backend /app/meowsenger_backend
 COPY --chown=appuser:appuser manage.py /app/
 
+# Create entrypoint script to run migrations
+RUN echo '#!/bin/bash\n\
+echo "Running migrations..."\n\
+python manage.py makemigrations\n\
+python manage.py migrate\n\
+echo "Starting application..."\n\
+exec gunicorn --bind :${PORT:-8000} --workers 1 --threads 8 --timeout 0 meowsenger_backend.wsgi:application\n\
+' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh && \
+    chown appuser:appuser /app/entrypoint.sh
+
 USER appuser
 
-# Expose port and run Gunicorn
-# Cloud Run injects the PORT environment variable.
-CMD ["gunicorn", "--bind", ":$PORT", "--workers", "1", "--threads", "8", "--timeout", "0", "meowsenger_backend.wsgi:application"]
+# Expose port and run using the entrypoint script
+# Cloud Run injects the PORT environment variable
+CMD ["/app/entrypoint.sh"]

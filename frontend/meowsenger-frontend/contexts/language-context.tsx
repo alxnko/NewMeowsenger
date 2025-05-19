@@ -1,3 +1,4 @@
+"use client";
 import React, {
   createContext,
   useContext,
@@ -60,6 +61,8 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({
   // Detect browser language on initial load
   useEffect(() => {
     const detectBrowserLanguage = (): Language => {
+      if (typeof window === "undefined") return "en";
+
       // Get browser language (e.g., 'en-US', 'ru', 'ky')
       const browserLang = navigator.language.split("-")[0].toLowerCase();
 
@@ -74,6 +77,21 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({
       setLanguage(detectBrowserLanguage());
     }
   }, [hasLoadedPreferences]);
+
+  // Helper function to load language from localStorage
+  const loadFromLocalStorage = () => {
+    if (typeof window === "undefined") return;
+
+    const savedLanguage = localStorage.getItem("meowsenger-language");
+    if (
+      savedLanguage &&
+      (savedLanguage === "en" ||
+        savedLanguage === "ru" ||
+        savedLanguage === "kg")
+    ) {
+      setLanguage(savedLanguage as Language);
+    }
+  };
 
   // Effect to load language from backend for authenticated users
   useEffect(() => {
@@ -100,29 +118,18 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({
     }
   }, [isLoggedIn, token]);
 
-  // Helper function to load language from localStorage
-  const loadFromLocalStorage = () => {
-    const savedLanguage = localStorage.getItem("meowsenger-language");
-    if (
-      savedLanguage &&
-      (savedLanguage === "en" ||
-        savedLanguage === "ru" ||
-        savedLanguage === "kg")
-    ) {
-      setLanguage(savedLanguage as Language);
-    }
-  };
-
   // Save language preference when it changes for authorized users
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     // Only save to localStorage and backend if the user has explicitly set a preference
     // or if they are logged in and we've loaded their preferences
-    if (hasLoadedPreferences && isLoggedIn) {
+    if (hasLoadedPreferences) {
       // Always save to localStorage for all users
       localStorage.setItem("meowsenger-language", language);
 
       // Only save to backend for authenticated users
-      if (token && !isSaving) {
+      if (isLoggedIn && token && !isSaving) {
         setIsSaving(true);
         authApi
           .updateUserPreferences(token, { language })

@@ -82,17 +82,25 @@ echo logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 
 echo All configurations updated! Starting services...
 
-REM Run Django migrations and start the backend server in the same terminal
+
+REM Run Django migrations and start the backend server
+echo Starting Django backend...
 start cmd /k "cd backend && python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
 REM Add delay to ensure Django has time to initialize the database
 echo Waiting for Django to initialize the database...
 timeout /t 10 /nobreak
 
-REM Start the messaging service after Django has initialized
-start cmd /k "cd messaging/meowsenger && mvn spring-boot:run"
+REM Start the Spring Boot messaging service with local profile
+echo Starting Spring Boot messaging service...
+start cmd /k "cd messaging/meowsenger && set SPRING_PROFILES_ACTIVE=local && mvn spring-boot:run"
 
-REM Start the frontend server - removed --host flag since it doesn't work with turbopack
+REM Add delay to ensure Spring Boot has time to initialize
+echo Waiting for messaging service to initialize...
+timeout /t 10 /nobreak
+
+REM Start the frontend server
+echo Starting frontend development server...
 start cmd /k "cd frontend/meowsenger-frontend && npm run dev"
 
 echo.
@@ -102,3 +110,6 @@ echo    Frontend: http://%LOCAL_IP%:3000
 echo    Backend API: http://%LOCAL_IP%:8000
 echo    WebSocket: ws://%LOCAL_IP%:8081/ws
 echo =======================================
+echo.
+echo Press Ctrl+C in any window to stop the corresponding service.
+echo To stop all services, close all command windows.

@@ -39,8 +39,8 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
-# Allow access from any host for development
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "*"]
+# Allow access from any host
+ALLOWED_HOSTS = ["*"]
 
 # Try to load additional hosts from local_hosts.py (created by setupNetwork.bat)
 try:
@@ -65,6 +65,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "meowsenger_backend",  # Add this to recognize your app
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -153,19 +155,26 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS configuration - simplified for development
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true"
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(
-    ","
-)
+# CORS configuration - allow all origins for both local and production
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ORIGIN_ALLOW_ALL = True
+# We'll keep these settings for reference or in case we need to restrict in the future
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://localhost:3000",
+    "http://meowsenger-frontend-307953174855.us-central1.run.app",
+    "https://meowsenger-frontend-307953174855.us-central1.run.app",
+    "https://meow.dedyn.io",
+    "http://meow.dedyn.io",
+]
 CORS_ALLOW_CREDENTIALS = True
 
 # Add CORS_ORIGIN_ALLOW_ALL for backward compatibility
-CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS
+# CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS - Not needed as we explicitly set it to True
 
-# For handling credentials with specific origins
-if not CORS_ALLOW_ALL_ORIGINS and CORS_ALLOWED_ORIGINS:
-    CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
+# For handling credentials with specific origins - we're allowing all origins now
+# if not CORS_ALLOW_ALL_ORIGINS and CORS_ALLOWED_ORIGINS:
+#    CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
 
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -186,10 +195,18 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "*",  # Allow all headers
 ]
 
-# Set trusted origins for CSRF
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+# Set trusted origins for CSRF - this is for form submissions
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "https://localhost:3000",
+    "http://meowsenger-frontend-307953174855.us-central1.run.app",
+    "https://meowsenger-frontend-307953174855.us-central1.run.app",
+    "https://meow.dedyn.io",
+    "http://meow.dedyn.io",
+]
 
 
 # Add this custom TokenAuthentication class that supports both schemes

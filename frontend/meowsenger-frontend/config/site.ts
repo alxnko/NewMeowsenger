@@ -16,4 +16,5 @@ export const ROUTES = {
   // users
   user: (id: string) => `/user/${id}`,
   settings: "/settings",
+  games: "/games",
 };

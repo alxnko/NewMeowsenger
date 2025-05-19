@@ -42,13 +42,15 @@ mvn install
 ### 3. Environment Configuration
 
 1. **Frontend (.env.local)**:
+
    ```
    NEXT_PUBLIC_API_URL=http://localhost:8000
-   NEXT_PUBLIC_WS_URL=ws://localhost:8080
+   NEXT_PUBLIC_WS_URL=http://localhost:8081/ws
    NEXT_PUBLIC_ENV=development
    ```
 
 2. **Backend (.env)**:
+
    ```
    DEBUG=True
    SECRET_KEY=your-secret-key
@@ -71,6 +73,7 @@ mvn install
 ### 1. Running Services
 
 #### Local Development
+
 ```bash
 # Using provided scripts
 ./runDev.bat
@@ -90,6 +93,7 @@ mvn spring-boot:run
 ```
 
 #### Docker Development
+
 ```bash
 docker-compose up --build
 ```
@@ -113,12 +117,14 @@ python manage.py createsuperuser
 ### 1. Frontend (Next.js)
 
 #### General
+
 - Use TypeScript for all new code
 - Follow ESLint configuration
 - Use functional components
 - Implement proper error handling
 
 #### Components
+
 ```typescript
 // Example component structure
 import { FC } from 'react';
@@ -137,6 +143,7 @@ export const Component: FC<Props> = ({ prop1, prop2 }) => {
 ```
 
 #### Styling
+
 - Use Tailwind CSS
 - Follow mobile-first approach
 - Use HeroUI components when available
@@ -145,6 +152,7 @@ export const Component: FC<Props> = ({ prop1, prop2 }) => {
 ### 2. Backend (Django)
 
 #### Models
+
 ```python
 # Example model
 from django.db import models
@@ -158,6 +166,7 @@ class Model(models.Model):
 ```
 
 #### Views
+
 ```python
 # Example view
 from rest_framework import viewsets
@@ -168,6 +177,7 @@ class ViewSet(viewsets.ModelViewSet):
 ```
 
 #### Serializers
+
 ```python
 # Example serializer
 from rest_framework import serializers
@@ -181,6 +191,7 @@ class ModelSerializer(serializers.ModelSerializer):
 ### 3. Messaging Service (Spring Boot)
 
 #### Controllers
+
 ```java
 // Example controller
 @RestController
@@ -197,6 +208,7 @@ public class Controller {
 ```
 
 #### Services
+
 ```java
 // Example service
 @Service
@@ -213,6 +225,7 @@ public class Service {
 ## Testing
 
 ### 1. Frontend Tests
+
 ```bash
 # Run tests
 npm test
@@ -222,6 +235,7 @@ npm test -- --coverage
 ```
 
 ### 2. Backend Tests
+
 ```bash
 # Run tests
 python manage.py test
@@ -232,6 +246,7 @@ coverage report
 ```
 
 ### 3. Messaging Service Tests
+
 ```bash
 # Run tests
 mvn test
@@ -243,6 +258,7 @@ mvn verify
 ## Git Workflow
 
 ### 1. Branching Strategy
+
 - `main`: Production-ready code
 - `develop`: Development branch
 - `feature/*`: Feature branches
@@ -250,6 +266,7 @@ mvn verify
 - `release/*`: Release branches
 
 ### 2. Commit Guidelines
+
 ```
 type(scope): subject
 
@@ -259,6 +276,7 @@ footer
 ```
 
 Types:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation
@@ -268,6 +286,7 @@ Types:
 - `chore`: Maintenance
 
 ### 3. Pull Request Process
+
 1. Create feature branch
 2. Implement changes
 3. Write tests
@@ -279,16 +298,19 @@ Types:
 ## Documentation
 
 ### 1. Code Documentation
+
 - Use JSDoc for frontend
 - Use docstrings for backend
 - Use JavaDoc for messaging service
 
 ### 2. API Documentation
+
 - Use OpenAPI/Swagger
 - Document all endpoints
 - Include request/response examples
 
 ### 3. Component Documentation
+
 - Document props
 - Include usage examples
 - Document state management
@@ -296,18 +318,21 @@ Types:
 ## Performance Optimization
 
 ### 1. Frontend
+
 - Implement code splitting
 - Optimize images
 - Use proper caching
 - Minimize bundle size
 
 ### 2. Backend
+
 - Optimize database queries
 - Implement caching
 - Use proper indexing
 - Monitor performance
 
 ### 3. Messaging Service
+
 - Optimize WebSocket connections
 - Implement message batching
 - Use proper thread management
@@ -316,18 +341,21 @@ Types:
 ## Security
 
 ### 1. Authentication
+
 - Use JWT tokens
 - Implement proper validation
 - Secure password handling
 - Session management
 
 ### 2. Authorization
+
 - Role-based access control
 - Resource ownership validation
 - API endpoint protection
 - WebSocket security
 
 ### 3. Data Protection
+
 - Input validation
 - SQL injection prevention
 - XSS protection
@@ -336,18 +364,21 @@ Types:
 ## Monitoring and Logging
 
 ### 1. Frontend
+
 - Error tracking
 - Performance monitoring
 - User analytics
 - Console logging
 
 ### 2. Backend
+
 - Request logging
 - Error tracking
 - Performance metrics
 - Database monitoring
 
 ### 3. Messaging Service
+
 - Connection monitoring
 - Message tracking
 - Error logging
@@ -356,18 +387,21 @@ Types:
 ## Common Issues and Solutions
 
 ### 1. Development Issues
+
 - Database connection problems
 - WebSocket connection issues
 - Build errors
 - Dependency conflicts
 
 ### 2. Performance Issues
+
 - Slow database queries
 - Memory leaks
 - Network latency
 - Resource exhaustion
 
 ### 3. Security Issues
+
 - Authentication failures
 - Authorization errors
 - Data validation issues
@@ -376,19 +410,22 @@ Types:
 ## Resources
 
 ### 1. Documentation
+
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Django Documentation](https://docs.djangoproject.com)
 - [Spring Boot Documentation](https://spring.io/projects/spring-boot)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs)
 
 ### 2. Tools
+
 - VS Code Extensions
 - Development Tools
 - Testing Tools
 - Monitoring Tools
 
 ### 3. References
+
 - Coding Standards
 - Best Practices
 - Design Patterns
-- Security Guidelines 
+- Security Guidelines

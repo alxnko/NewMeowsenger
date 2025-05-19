@@ -55,7 +55,9 @@ export async function apiFetch<T = any>(
   options: ApiOptions = {}
 ): Promise<T> {
   const { method = "GET", body } = options;
+
   // Get token from options OR from in-memory storage if not provided
+  // This will automatically check both memory and cookie storage
   const token = options.token || getToken();
 
   const headers: Record<string, string> = {
@@ -70,7 +72,7 @@ export async function apiFetch<T = any>(
   const config: RequestInit = {
     method,
     headers,
-    credentials: "include",
+    credentials: "include", // Always include credentials to support cookies
     mode: "cors", // Explicitly set CORS mode
   };
 
@@ -161,7 +163,7 @@ export const authApi = {
     is_tester?: boolean;
     is_verified?: boolean;
   }): Promise<AuthResponse> =>
-    apiFetch<AuthResponse>("/api/register/", {
+    apiFetch<AuthResponse>("/api/auth/register/", {
       method: "POST",
       body: userData,
     }),
@@ -341,18 +343,19 @@ export const chatApi = {
     replyTo?: number,
     isForwarded: boolean = false
   ): Promise<ApiResponse> => {
-    // Create payload with explicit isForwarded flag
-    const payload = {
-      to,
-      text,
-      replyTo,
-      isForwarded,
-    };
+    // Warning: This endpoint is not implemented in the Django backend
+    // Messages should be sent using the WebSocket service instead
+    console.warn(
+      "API sendMessage is deprecated - use websocketService.sendChatMessage instead"
+    );
 
-    return apiFetch<ApiResponse>("/api/c/send_message", {
-      method: "POST",
-      body: payload,
-      token,
+    // Instead of making an API call, use the websocket utility directly
+    // This is a fallback for compatibility until all code is migrated to WebSocket
+
+    // Compatibility layer to maintain the same interface
+    return Promise.resolve({
+      status: false,
+      message: "Please use WebSocket for sending messages",
     });
   },
 

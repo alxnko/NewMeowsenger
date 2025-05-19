@@ -294,7 +294,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Add a system notification to the chat messages
         if (message.content) {
           // Generate a unique message ID based on content and timestamp to prevent duplicates
-          const messageKey = `admin_status_change_${message.targetUsername}_${message.isPromotion ? "add" : "remove"}_${Date.now().toString().substring(0, 8)}`;
+          const messageKey = `admin_status_change_${message.targetUsername}_${
+            message.isPromotion ? "add" : "remove"
+          }_${Date.now().toString().substring(0, 8)}`;
 
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
@@ -385,7 +387,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Add a system notification to the chat messages
         if (message.content) {
           // Generate a unique message ID based on content and timestamp to prevent duplicates
-          const messageKey = `member_removed_${message.targetUsername}_${Date.now().toString().substring(0, 8)}`;
+          const messageKey = `member_removed_${
+            message.targetUsername
+          }_${Date.now().toString().substring(0, 8)}`;
 
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
@@ -503,7 +507,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Add a system notification to the chat messages
         if (message.content) {
           // Generate a unique key for deduplication
-          const messageKey = `member_added_${message.targetUserId}_${Date.now().toString().substring(0, 8)}`;
+          const messageKey = `member_added_${message.targetUserId}_${Date.now()
+            .toString()
+            .substring(0, 8)}`;
 
           const systemMessage: ChatMessage = {
             id: message.messageId || Date.now(),
@@ -933,7 +939,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               id: message.messageId || Date.now(),
               text:
                 message.content ||
-                `${message.username || "Someone"} removed ${message.targetUsername || "a user"} from the group`,
+                `${message.username || "Someone"} removed ${
+                  message.targetUsername || "a user"
+                } from the group`,
               author: "System",
               time: new Date(message.timestamp).getTime() / 1000,
               isDeleted: false,
@@ -982,7 +990,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             id: message.messageId || Date.now(),
             text:
               message.content ||
-              `${message.username || "Someone"} added ${message.targetUsername || "a user"} to the group`,
+              `${message.username || "Someone"} added ${
+                message.targetUsername || "a user"
+              } to the group`,
             author: "System",
             time: new Date(message.timestamp).getTime() / 1000,
             isDeleted: false,
@@ -1015,7 +1025,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               openChat(currentChat.id);
 
               // Generate notification key to prevent duplicates
-              const notificationKey = `admin_removed_${Date.now().toString().substring(0, 5)}`;
+              const notificationKey = `admin_removed_${Date.now()
+                .toString()
+                .substring(0, 5)}`;
 
               // Check if we've recently shown this notification
               if (!sessionStorage.getItem(notificationKey)) {
@@ -1036,7 +1048,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               openChat(currentChat.id);
 
               // Generate notification key to prevent duplicates
-              const notificationKey = `admin_added_${Date.now().toString().substring(0, 5)}`;
+              const notificationKey = `admin_added_${Date.now()
+                .toString()
+                .substring(0, 5)}`;
 
               // Check if we've recently shown this notification
               if (!sessionStorage.getItem(notificationKey)) {

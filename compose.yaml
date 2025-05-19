@@ -3,7 +3,9 @@ version: "3.8"
 services:
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend/meowsenger-frontend
+      args:
+        - NPM_CONFIG_LEGACY_PEER_DEPS=true
     ports:
       - "3000:3000"
     depends_on:
@@ -15,7 +17,8 @@ services:
       - meowsenger-network
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_WS_URL=http://localhost:8080/ws
+      - NEXT_PUBLIC_WS_URL=http://localhost:8081/ws
+      - NPM_CONFIG_LEGACY_PEER_DEPS=true
 
   backend:
     build:

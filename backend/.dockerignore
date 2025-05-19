@@ -1,8 +1,6 @@
-# Local environment files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Ignore all env files except base .env
+.env.*
+!.env
 
 # Python
 __pycache__/

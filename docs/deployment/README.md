@@ -39,6 +39,7 @@ This guide covers the deployment process for Meowsenger's microservices architec
 ## Docker Configuration
 
 ### 1. Frontend Service
+
 ```dockerfile
 # frontend/Dockerfile
 FROM node:18-alpine
@@ -52,6 +53,7 @@ CMD ["npm", "start"]
 ```
 
 ### 2. Backend Service
+
 ```dockerfile
 # backend/Dockerfile
 FROM python:3.8-slim
@@ -64,6 +66,7 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 ```
 
 ### 3. Messaging Service
+
 ```dockerfile
 # messaging/Dockerfile
 FROM openjdk:17-slim
@@ -77,7 +80,7 @@ CMD ["java", "-jar", "app.jar"]
 
 ```yaml
 # compose.yaml
-version: '3.8'
+version: "3.8"
 
 services:
   frontend:
@@ -86,7 +89,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
-      - NEXT_PUBLIC_WS_URL=ws://messaging:8080
+      - NEXT_PUBLIC_WS_URL=http://messaging:8080
     depends_on:
       - backend
       - messaging
@@ -129,12 +132,14 @@ volumes:
 ### 1. Local Development
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/your-org/meowsenger.git
    cd meowsenger
    ```
 
 2. **Build and run services**:
+
    ```bash
    docker-compose up --build
    ```
@@ -147,11 +152,13 @@ volumes:
 ### 2. Production Deployment
 
 1. **Environment Setup**:
+
    - Set up production environment variables
    - Configure SSL certificates
    - Set up proper database credentials
 
 2. **Build and Deploy**:
+
    ```bash
    # Build images
    docker-compose -f docker-compose.prod.yml build
@@ -161,6 +168,7 @@ volumes:
    ```
 
 3. **Database Migration**:
+
    ```bash
    # Backend migrations
    docker-compose exec backend python manage.py migrate
@@ -174,6 +182,7 @@ volumes:
 ### 1. Local Network Access
 
 Use the provided `setupNetwork.bat` script to configure local network access:
+
 ```bash
 ./setupNetwork.bat
 ```
@@ -181,6 +190,7 @@ Use the provided `setupNetwork.bat` script to configure local network access:
 ### 2. Production Network
 
 1. **Configure Nginx**:
+
    ```nginx
    server {
        listen 80;
@@ -211,6 +221,7 @@ Use the provided `setupNetwork.bat` script to configure local network access:
 ## Monitoring
 
 ### 1. Logs
+
 ```bash
 # View all logs
 docker-compose logs -f
@@ -222,6 +233,7 @@ docker-compose logs -f messaging
 ```
 
 ### 2. Health Checks
+
 - Frontend: http://localhost:3000/health
 - Backend: http://localhost:8000/health
 - Messaging: http://localhost:8080/health
@@ -229,6 +241,7 @@ docker-compose logs -f messaging
 ## Backup and Recovery
 
 ### 1. Database Backup
+
 ```bash
 # Backup
 docker-compose exec db pg_dump -U postgres meowsenger > backup.sql
@@ -238,6 +251,7 @@ docker-compose exec db psql -U postgres meowsenger < backup.sql
 ```
 
 ### 2. Volume Backup
+
 ```bash
 # Backup volumes
 docker run --rm -v meowsenger_postgres_data:/source -v $(pwd):/backup alpine tar -czf /backup/postgres_data.tar.gz -C /source .
@@ -249,12 +263,14 @@ docker run --rm -v meowsenger_postgres_data:/target -v $(pwd):/backup alpine sh 
 ## Scaling
 
 ### 1. Horizontal Scaling
+
 ```bash
 # Scale services
 docker-compose up -d --scale frontend=3 --scale backend=3 --scale messaging=3
 ```
 
 ### 2. Load Balancing
+
 - Use Nginx as load balancer
 - Configure sticky sessions for WebSocket
 - Implement health checks
@@ -264,11 +280,13 @@ docker-compose up -d --scale frontend=3 --scale backend=3 --scale messaging=3
 ### 1. Common Issues
 
 1. **Database Connection**:
+
    - Check database credentials
    - Verify network connectivity
    - Check database logs
 
 2. **WebSocket Connection**:
+
    - Verify WebSocket URL
    - Check authentication
    - Monitor connection logs
@@ -279,6 +297,7 @@ docker-compose up -d --scale frontend=3 --scale backend=3 --scale messaging=3
    - Check resource usage
 
 ### 2. Debug Commands
+
 ```bash
 # Check service status
 docker-compose ps
@@ -296,11 +315,13 @@ docker network inspect meowsenger_default
 ## Security Considerations
 
 1. **Environment Variables**:
+
    - Use secure secrets management
    - Rotate credentials regularly
    - Use different credentials for dev/prod
 
 2. **Network Security**:
+
    - Configure proper firewall rules
    - Use SSL/TLS
    - Implement rate limiting
@@ -308,4 +329,4 @@ docker network inspect meowsenger_default
 3. **Container Security**:
    - Use non-root users
    - Scan for vulnerabilities
-   - Keep images updated 
+   - Keep images updated

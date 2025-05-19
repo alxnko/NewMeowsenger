@@ -30,7 +30,7 @@ export const CookieConsent: React.FC = () => {
     const checkEndpoints = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/health/`
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/`
         );
         if (!response.ok) {
           setEndpointsAvailable(false);
@@ -90,18 +90,18 @@ export const CookieConsent: React.FC = () => {
       onClose={() => {}} // Empty function to prevent closing by escape/clicking outside
       isDismissable={false} // Cannot be dismissed
       backdrop="blur"
-      className="lowercase"
-      placement="center"
+      className="lowercase z-[100]"
+      placement="top"
     >
       <ModalContent>
-        <ModalHeader className="flex flex-col gap-1">
+        <ModalHeader className="flex flex-col">
           <h3 className="text-xl font-medium lowercase">
             {t("cookie_consent")}
           </h3>
         </ModalHeader>
         <ModalBody>
           {!endpointsAvailable && (
-            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-4 flex items-center text-sm">
+            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-2 flex items-center text-sm">
               <FiAlertTriangle className="text-red-500 mr-2" />
               <p className="text-red-600 dark:text-red-400">
                 authentication server unavailable. secure storage may not work
@@ -110,25 +110,36 @@ export const CookieConsent: React.FC = () => {
             </div>
           )}
 
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {t("cookie_consent_description")}
           </p>
 
-          <div className="border-t border-b border-neutral-200 dark:border-neutral-800 py-4 my-2">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">
+              {t("cookies_we_use")}
+            </h4>
+            <ul className="text-xs text-neutral-600 dark:text-neutral-300 ml-2 list-disc list-inside space-y-1">
+              <li>{t("auth_cookies")}</li>
+              <li>{t("preference_cookies")}</li>
+              <li>{t("functional_cookies")}</li>
+            </ul>
+          </div>
+
+          <div>
             <div className="flex flex-col gap-4">
               <div>
-                <p className="text-sm font-medium mb-2">
+                <p className="text-sm font-medium mb-1">
                   {t("select_your_language")}
                 </p>
                 <LanguageSelector />
-                <p className="text-xs text-neutral-500 mt-1">
+                <p className="text-xs text-neutral-500">
                   {t("auto_detected_language")}
                 </p>
               </div>
 
               <div>
-                <p className="text-sm font-medium mb-2">{t("select_theme")}</p>
-                <div className="flex items-center gap-2">
+                <p className="text-sm font-medium mb-1">{t("select_theme")}</p>
+                <div className="flex items-center gap-1">
                   <Button
                     isIconOnly
                     variant="flat"
@@ -147,17 +158,13 @@ export const CookieConsent: React.FC = () => {
                   >
                     <FaMoon className="text-indigo-400" />
                   </Button>
-                  <p className="text-xs text-neutral-500 ml-2">
+                  <p className="text-xs text-neutral-500 ml-1">
                     {t("auto_detected_theme")}
                   </p>
                 </div>
               </div>
             </div>
           </div>
-
-          <p className="text-xs text-neutral-500 italic">
-            {t("preferences_not_saved")}
-          </p>
         </ModalBody>
         <ModalFooter>
           <Button

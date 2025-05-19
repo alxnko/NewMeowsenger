@@ -6,6 +6,11 @@ from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, UserSerializer, LoginSerializer
 from django.conf import settings
 
+# Cookie configuration constants
+COOKIE_NAME = "meowsenger_auth_token"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+COOKIE_PATH = "/"
+
 
 class RegisterView(generics.CreateAPIView):
     """
@@ -71,7 +76,11 @@ class LogoutView(APIView):
         # Delete the user's auth token to log them out
         try:
             request.user.auth_token.delete()
-            return Response({"status": True}, status=status.HTTP_200_OK)
+
+            # Also clear cookie just in case
+            response = Response({"status": True}, status=status.HTTP_200_OK)
+            response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH)
+            return response
         except Exception as e:
             return Response(
                 {"status": False, "error": str(e)},
@@ -149,17 +158,17 @@ class SetTokenCookieView(APIView):
 
         # Set the token as a secure HTTP-only cookie
         response = Response({"status": "Token cookie set"})
-        max_age = 60 * 60 * 24 * 30  # 30 days
 
         # Set secure properties for the cookie
         response.set_cookie(
-            "meowsenger_auth_token",
+            COOKIE_NAME,
             token,
-            max_age=max_age,
+            max_age=COOKIE_MAX_AGE,
             httponly=True,  # Not accessible via JavaScript
             samesite="Lax",  # Helps prevent CSRF
             secure=settings.SESSION_COOKIE_SECURE,  # True in production
-            path="/",
+            path=COOKIE_PATH,
+            expires=None,  # Let max_age control expiration
         )
 
         return response
@@ -174,7 +183,7 @@ class ClearTokenCookieView(APIView):
 
     def post(self, request, *args, **kwargs):
         response = Response({"status": "Token cookie cleared"})
-        response.delete_cookie("meowsenger_auth_token", path="/")
+        response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH)
         return response
 
 
@@ -187,18 +196,17 @@ class GetTokenFromCookieView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, *args, **kwargs):
-        token = request.COOKIES.get("meowsenger_auth_token")
+        token = request.COOKIES.get(COOKIE_NAME)
 
         # If token exists, validate it exists in the database
         if token:
             try:
                 Token.objects.get(key=token)
+                return Response({"token": token})
             except Token.DoesNotExist:
                 # Invalid token, clear the cookie
                 response = Response({"token": None})
-                response.delete_cookie("meowsenger_auth_token", path="/")
+                response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH)
                 return response
-
-            return Response({"token": token})
 
         return Response({"token": None})

@@ -52,12 +52,9 @@ def health_check(request):
 
 
 urlpatterns = [
+    path("", health_check, name="health_check"),  # Add this line
     path("admin/", admin.site.urls),
-    path("auth/", include("django.contrib.auth.urls")),
-    # Health check endpoint
-    path("health/", health_check, name="health_check"),
-    # Authentication endpoints
-    path("api/register/", RegisterView.as_view(), name="register"),
+    path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/login/", LoginView.as_view(), name="login"),
     path("api/logout/", LogoutView.as_view(), name="logout"),
     path("api/preferences/", UserPreferencesView.as_view(), name="user_preferences"),

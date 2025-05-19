@@ -1,15 +1,20 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { useLanguage } from "@/contexts/language-context";
+import { WebSocketDebug } from "@/components/elements/websocket-debug";
 
 interface WebSocketStatusProps {
   className?: string;
   showText?: boolean;
+  showDebug?: boolean;
   size?: "sm" | "md" | "lg";
 }
 
 export const WebSocketStatus: React.FC<WebSocketStatusProps> = ({
   className = "",
   showText = false,
+  showDebug = false,
   size = "md",
 }) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -57,20 +62,24 @@ export const WebSocketStatus: React.FC<WebSocketStatusProps> = ({
   };
 
   return (
-    <div className={`flex items-center ${className}`}>
-      <span
-        className={`inline-block ${indicatorSizeClasses[size]} rounded-full mr-1 ${
-          isConnected ? "bg-green-500" : "bg-red-500 animate-pulse"
-        }`}
-        title={isConnected ? t("connected") : t("disconnected")}
-      />
-      {showText && (
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div className="flex items-center">
         <span
-          className={`${textSizeClasses[size]} text-muted-foreground lowercase`}
-        >
-          {isConnected ? t("connected") : t("connecting...")}
-        </span>
-      )}
+          className={`inline-block ${indicatorSizeClasses[size]} rounded-full mr-1 ${
+            isConnected ? "bg-green-500" : "bg-red-500 animate-pulse"
+          }`}
+          title={isConnected ? t("connected") : t("disconnected")}
+        />
+        {showText && (
+          <span
+            className={`${textSizeClasses[size]} text-muted-foreground lowercase`}
+          >
+            {isConnected ? t("connected") : t("connecting...")}
+          </span>
+        )}
+      </div>
+
+      {showDebug && <WebSocketDebug />}
     </div>
   );
 };

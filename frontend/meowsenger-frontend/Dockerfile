@@ -2,21 +2,30 @@ FROM node:23-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+# Copy package files and npmrc first
+COPY package*.json .npmrc ./
 
-RUN npm i
+# Install dependencies with legacy peer deps
+RUN npm i --legacy-peer-deps
 
+# Copy the rest of the code
 COPY . .
 
+# Build with legacy peer deps
 RUN npm run build
 
 FROM node:23-alpine AS runner
 
 WORKDIR /app
 
+# Copy package files and npmrc
 COPY --from=builder /app/package*.json ./
-RUN npm i --only=production
+COPY --from=builder /app/.npmrc ./
 
+# Install only production dependencies
+RUN npm i --only=production --legacy-peer-deps
+
+# Copy build output and static files
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./next.config.js

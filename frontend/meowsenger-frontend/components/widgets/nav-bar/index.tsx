@@ -74,11 +74,11 @@ export default function NavBar() {
               <LogoButton />
               <Button
                 as={Link}
-                href={ROUTES.settings}
+                href={ROUTES.games}
                 className="m-1 w-24 rounded-full"
                 variant="light"
               >
-                {t("settings")}
+                {t("games")}
               </Button>
             </>
           )}

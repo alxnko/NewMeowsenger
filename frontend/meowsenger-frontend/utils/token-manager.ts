@@ -1,15 +1,13 @@
 /**
- * Secure token manager that uses in-memory storage with cookie fallback
- * This implementation is more secure than localStorage because:
- * 1. The token is primarily held in memory and not accessible via JavaScript from other tabs/windows
- * 2. For persistence across page refreshes, we use a httpOnly cookie (when available)
- * 3. We use a less sensitive sessionId in localStorage only for cross-tab communication
+ * Secure token manager that uses cookies for tokens and localStorage for user data
+ * This implementation is more secure than pure localStorage because:
+ * 1. The auth token is stored in cookies with proper security settings
+ * 2. We use secure cookie settings to protect against XSS
+ * 3. We use localStorage only for less sensitive data like user info
  */
 
 import { v4 as uuidv4 } from "uuid";
-
-// API URL from environment
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import Cookies from "js-cookie";
 
 // Generate a unique session ID for this browser tab
 // If uuid import fails, use a timestamp-based random ID as fallback
@@ -29,70 +27,17 @@ let currentUser: any | null = null;
 const SESSION_ID_KEY = "meowsenger_session_id";
 const TOKEN_CHANGE_EVENT = "meowsenger_token_change";
 const LOCAL_STORAGE_SESSION_KEY = "meowsenger_active_session";
+const USER_STORAGE_KEY = "meowsenger_user";
+const TOKEN_COOKIE_KEY = "meowsenger_token";
 
-// Direct fetch calls to avoid circular dependency with api-client
-async function fetchSetCookie(token: string): Promise<void> {
-  try {
-    const response = await fetch(`${API_URL}/api/auth/set-cookie`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ token }),
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Error setting cookie:", errorData);
-      throw new Error(`Failed to set auth cookie: ${response.status}`);
-    }
-  } catch (error) {
-    console.error("Failed to set auth cookie:", error);
-    // Don't re-throw to prevent blocking the auth flow
-  }
-}
-
-async function fetchClearCookie(): Promise<void> {
-  try {
-    const response = await fetch(`${API_URL}/api/auth/clear-cookie`, {
-      method: "POST",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Error clearing cookie:", errorData);
-      throw new Error(`Failed to clear auth cookie: ${response.status}`);
-    }
-  } catch (error) {
-    console.error("Failed to clear auth cookie:", error);
-    // Don't re-throw to prevent blocking the auth flow
-  }
-}
-
-async function fetchGetToken(): Promise<{ token: string | null }> {
-  try {
-    const response = await fetch(`${API_URL}/api/auth/get-token`, {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Error getting token from cookie:", errorData);
-      return { token: null };
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Failed to get auth token from cookie:", error);
-    return { token: null };
-  }
-}
+// Cookie settings
+const COOKIE_EXPIRES = 30; // days
+const COOKIE_PATH = "/";
+const COOKIE_SECURE = process.env.NODE_ENV === "production";
+const COOKIE_SAMESITE = "strict";
 
 /**
- * Set the authentication token both in memory and via API cookie
+ * Set the authentication token both in memory and via cookie
  */
 export async function setToken(token: string, user: any): Promise<void> {
   // Set in memory
@@ -103,15 +48,16 @@ export async function setToken(token: string, user: any): Promise<void> {
   localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, SESSION_ID);
   localStorage.setItem(SESSION_ID_KEY, SESSION_ID);
 
-  // Save the user data for use across the app
-  localStorage.setItem("user", JSON.stringify(user));
+  // Save the user data to localStorage
+  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
 
-  // Send the token to backend to set it as a httpOnly cookie
-  try {
-    await fetchSetCookie(token);
-  } catch (error) {
-    console.error("Failed to set auth cookie:", error);
-  }
+  // Save token in cookie
+  Cookies.set(TOKEN_COOKIE_KEY, token, {
+    expires: COOKIE_EXPIRES,
+    path: COOKIE_PATH,
+    secure: COOKIE_SECURE,
+    sameSite: COOKIE_SAMESITE,
+  });
 
   // Notify other tabs about the login
   try {
@@ -130,7 +76,13 @@ export async function setToken(token: string, user: any): Promise<void> {
  * Get the current authentication token
  */
 export function getToken(): string | null {
-  return inMemoryToken;
+  // First try memory
+  if (inMemoryToken) {
+    return inMemoryToken;
+  }
+
+  // Then try cookie
+  return Cookies.get(TOKEN_COOKIE_KEY) || null;
 }
 
 /**
@@ -144,7 +96,7 @@ export function getUser(): any | null {
  * Check if the user is logged in
  */
 export function isLoggedIn(): boolean {
-  return !!inMemoryToken;
+  return !!getToken();
 }
 
 /**
@@ -158,14 +110,12 @@ export async function clearToken(): Promise<void> {
   // Remove the session ID from localStorage
   localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
   localStorage.removeItem(SESSION_ID_KEY);
-  localStorage.removeItem("user");
+  localStorage.removeItem(USER_STORAGE_KEY);
 
-  // Clear the cookie via API
-  try {
-    await fetchClearCookie();
-  } catch (error) {
-    console.error("Failed to clear auth cookie:", error);
-  }
+  // Remove the token cookie
+  Cookies.remove(TOKEN_COOKIE_KEY, {
+    path: COOKIE_PATH,
+  });
 
   // Notify other tabs about the logout
   try {
@@ -181,39 +131,46 @@ export async function clearToken(): Promise<void> {
 }
 
 /**
- * Initialize the token manager - try to restore token from cookie
+ * Initialize the token manager - try to restore token from cookie and user from localStorage
  */
 export async function initTokenManager(): Promise<{
   token: string | null;
   user: any | null;
 }> {
-  // Check if we have a valid session in another tab
-  const activeSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-  const storedUser = localStorage.getItem("user");
-
-  // Try to restore the token from the cookie
-  try {
-    const response = await fetchGetToken();
-
-    if (response.token) {
-      inMemoryToken = response.token;
-      if (storedUser) {
-        try {
-          currentUser = JSON.parse(storedUser);
-        } catch (e) {
-          console.error("Failed to parse stored user data");
-          currentUser = null;
-        }
-      }
-      return { token: response.token, user: currentUser };
-    }
-  } catch (error) {
-    console.error("Failed to restore auth token:", error);
+  // Try to restore the token from the cookie first
+  const cookieToken = Cookies.get(TOKEN_COOKIE_KEY);
+  if (cookieToken) {
+    inMemoryToken = cookieToken;
   }
 
-  // If no token is available but another tab has a session, show a message
-  if (activeSession && activeSession !== SESSION_ID) {
-    console.log("Session active in another tab");
+  // Try to get user from localStorage
+  const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+  if (storedUser) {
+    try {
+      currentUser = JSON.parse(storedUser);
+    } catch (e) {
+      console.error("Failed to parse stored user data");
+    }
+  }
+
+  // If we have both token and user, we're authenticated
+  if (inMemoryToken && currentUser) {
+    console.log("Auth restored from cookies/localStorage");
+    return { token: inMemoryToken, user: currentUser };
+  }
+
+  // Handle case where we have token but no user
+  if (inMemoryToken && !currentUser) {
+    console.log("Found token but no user data, logging out");
+    await clearToken();
+    return { token: null, user: null };
+  }
+
+  // Handle case where we have user but no token
+  if (!inMemoryToken && currentUser) {
+    console.log("Found user data but no token, logging out");
+    await clearToken();
+    return { token: null, user: null };
   }
 
   return { token: null, user: null };

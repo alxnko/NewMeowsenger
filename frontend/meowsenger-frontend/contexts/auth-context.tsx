@@ -1,3 +1,4 @@
+"use client";
 import {
   createContext,
   useState,
@@ -69,7 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Use a timeout to avoid blocking app rendering
+        // Set a loading state while we attempt to restore auth
+        setLoading(true);
+
+        // Use a timeout to avoid blocking app rendering for too long
         const timeoutPromise = new Promise<{
           token: string | null;
           user: any | null;
@@ -86,13 +90,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (storedToken && storedUser) {
           setUser(storedUser);
           setToken(storedToken);
-          console.log("Auth restored from secure storage");
+          console.log("Auth restored from cookies and localStorage");
         } else {
-          console.log("No stored auth found");
+          console.log("No stored auth found, user is logged out");
+          // Ensure user is properly logged out
+          await tokenManager.clearToken();
+          setUser(null);
+          setToken(null);
         }
       } catch (err) {
         console.error("Error initializing auth:", err);
-        // Don't show error toast to user as this is background initialization
+        // On error, try one more time to get auth without the timeout
+        try {
+          const { token: fallbackToken, user: fallbackUser } =
+            await tokenManager.initTokenManager();
+          if (fallbackToken && fallbackUser) {
+            setUser(fallbackUser);
+            setToken(fallbackToken);
+            console.log("Auth restored on second attempt");
+          } else {
+            // If we still can't restore auth, clear any partial state
+            await tokenManager.clearToken();
+          }
+        } catch (fallbackErr) {
+          console.error("Failed final auth restore attempt:", fallbackErr);
+        }
       } finally {
         setLoading(false);
       }
@@ -242,15 +264,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.logout(token);
       }
 
-      // Clear token from secure token manager instead of localStorage
+      // Clear token from secure token manager
       await tokenManager.clearToken();
-    } catch (err) {
-      console.error("Logout error:", err);
-    } finally {
+
+      // Ensure state is reset
       setUser(null);
       setToken(null);
-      setLoading(false);
+
+      // Redirect to login page
       router.push("/login");
+    } catch (err) {
+      console.error("Logout error:", err);
+
+      // Even if API call fails, clear local state
+      setUser(null);
+      setToken(null);
+      await tokenManager.clearToken();
+    } finally {
+      setLoading(false);
     }
   };
 

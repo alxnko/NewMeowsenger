@@ -99,9 +99,9 @@ const WS_CONSTANTS = {
     MEMBER_ADDITIONS: "member_additions_",
   },
   CONNECTION: {
-    MAX_RECONNECT_ATTEMPTS: 5,
-    RECONNECT_DELAY: 5000,
-    CONNECTION_TIMEOUT: 10000,
+    MAX_RECONNECT_ATTEMPTS: 10, // Increased from 5
+    RECONNECT_DELAY: 3000, // Decreased from 5000
+    CONNECTION_TIMEOUT: 20000, // Increased from 10000
   },
   STORAGE_KEYS: {
     WS_CONNECTED: "ws_connected",
@@ -124,9 +124,29 @@ class WebSocketService {
   private connectionTimeout: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
-  // Base WebSocket URL
-  private readonly WS_URL =
-    process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081/ws";
+  // Base WebSocket URL - SockJS requires http/https URLs
+  private readonly WS_URL = (() => {
+    // Get the URL from env or use the default (ensure it points to correct port 8081)
+    const envUrl = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8081/ws";
+
+    // In production/deployed environments, ensure we use https if we're on a secure connection
+    if (typeof window !== "undefined") {
+      // Check if we should use HTTPS based on current page protocol
+      if (window.location.protocol === "https:" && envUrl.startsWith("http:")) {
+        return envUrl.replace("http:", "https:");
+      }
+
+      // If URL format is incorrect (user might have set ws:// or wss://), convert to http/https for SockJS
+      if (envUrl.startsWith("ws:")) {
+        return envUrl.replace("ws:", "http:");
+      }
+      if (envUrl.startsWith("wss:")) {
+        return envUrl.replace("wss:", "https:");
+      }
+    }
+
+    return envUrl;
+  })();
 
   /**
    * Initialize the WebSocket connection
@@ -145,11 +165,17 @@ class WebSocketService {
       this.userId = userId;
       console.log("[WebSocket] Attempting to connect...");
 
+      // Use the preconfigured URL - SockJS requires http/https, not ws/wss
+      const sockjsUrl = this.WS_URL;
+      console.log(
+        `[WebSocket] Using SockJS URL: ${sockjsUrl} (SockJS will handle protocol upgrade)`
+      );
+
       // Store username for messages
       this.setupUsername();
 
-      // Create STOMP client
-      this.setupClient(token);
+      // Create STOMP client with enhanced URL
+      this.setupClient(token, sockjsUrl);
 
       // Set connection timeout
       this.connectionTimeout = setTimeout(() => {
@@ -163,6 +189,7 @@ class WebSocketService {
 
       // Activate the client
       try {
+        console.log("[WebSocket] Activating client...");
         this.client?.activate();
       } catch (error) {
         console.error("[WebSocket] Failed to activate client:", error);
@@ -216,21 +243,117 @@ class WebSocketService {
   /**
    * Set up the STOMP client
    */
-  private setupClient(token: string): void {
+  private setupClient(token: string, wsURL: string = this.WS_URL): void {
+    console.log(`[WebSocket] Setting up client with URL: ${wsURL}`);
+
+    // Generate a unique client ID to prevent connection confusion
+    const clientId = `meowsenger-client-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 10)}`;
+
     this.client = new Client({
-      webSocketFactory: () => new SockJS(this.WS_URL),
-      connectHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
-      debug: (msg) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[STOMP]", msg);
-          this.parseMessageForDebugging(msg);
+      webSocketFactory: () => {
+        // Add timestamp and client ID parameters
+        // The timestamp is crucial to prevent caching issues with Cloud Run
+        const sockjsUrl = `${wsURL}?t=${Date.now()}&clientId=${clientId}`;
+        console.log(`[WebSocket] Creating SockJS connection to: ${sockjsUrl}`);
+
+        try {
+          // Configure SockJS specifically for Cloud Run
+          // Only use transports that work well with Cloud Run
+          const socket = new SockJS(sockjsUrl, null, {
+            transports: ["websocket", "xhr-streaming"],
+            timeout: 30000, // Increased timeout for Cloud Run latency
+          });
+
+          // Enhanced error handling with detailed logging
+          socket.onerror = (error) => {
+            console.error("[SockJS] Connection error:", error);
+          };
+
+          socket.onclose = (event) => {
+            console.log(
+              `[SockJS] Connection closed with code: ${event?.code}, reason: ${
+                event?.reason || "Unknown"
+              }`
+            );
+            // Log detailed information about the close event
+            if (event?.code) {
+              switch (event.code) {
+                case 1000:
+                  console.log("[SockJS] Normal closure");
+                  break;
+                case 1001:
+                  console.log("[SockJS] Remote going away");
+                  break;
+                case 1002:
+                  console.log("[SockJS] Protocol error");
+                  break;
+                case 1003:
+                  console.log("[SockJS] Unsupported data");
+                  break;
+                case 1005:
+                  console.log("[SockJS] No status code");
+                  break;
+                case 1006:
+                  console.log(
+                    "[SockJS] Abnormal closure - likely a Cloud Run timeout"
+                  );
+                  break;
+                case 1007:
+                  console.log("[SockJS] Invalid frame payload data");
+                  break;
+                case 1008:
+                  console.log("[SockJS] Policy violation");
+                  break;
+                case 1009:
+                  console.log("[SockJS] Message too big");
+                  break;
+                case 1010:
+                  console.log("[SockJS] Missing extension");
+                  break;
+                case 1011:
+                  console.log("[SockJS] Internal error");
+                  break;
+                case 1012:
+                  console.log("[SockJS] Service restart");
+                  break;
+                case 1013:
+                  console.log("[SockJS] Try again later");
+                  break;
+                case 1014:
+                  console.log("[SockJS] Bad gateway");
+                  break;
+                case 1015:
+                  console.log("[SockJS] TLS handshake failure");
+                  break;
+                default:
+                  console.log(`[SockJS] Unknown close code: ${event.code}`);
+              }
+            }
+          };
+
+          // Add diagnostic open handler
+          socket.onopen = () => {
+            console.log("[SockJS] Connection opened successfully");
+          };
+
+          return socket;
+        } catch (error) {
+          console.error("[SockJS] Error creating socket:", error);
+          throw error;
         }
       },
+      connectHeaders: {
+        Authorization: `Bearer ${token}`, // Include token in connection headers
+        "X-Client-ID": clientId, // Add client ID for debugging
+      },
+      debug: (msg) => {
+        this.parseMessageForDebugging(msg);
+      },
       reconnectDelay: WS_CONSTANTS.CONNECTION.RECONNECT_DELAY,
-      heartbeatIncoming: 30000,
-      heartbeatOutgoing: 30000,
+      heartbeatIncoming: 25000, // Increased from default 10000
+      heartbeatOutgoing: 25000, // Increased from default 10000
     });
   }
 
@@ -1527,7 +1650,45 @@ class WebSocketService {
   }
 
   /**
-   * Ensure a connection is established with the user ID
+   * Test WebSocket connectivity with a simple message
+   * This can be used to diagnose connection issues
+   */
+  public testConnection(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.client || !this.connected) {
+        console.error("[WebSocket] Cannot test: not connected");
+        resolve(false);
+        return;
+      }
+
+      try {
+        const subscription = this.client.subscribe("/topic/test", (message) => {
+          console.log("[WebSocket] Test response received:", message.body);
+          subscription.unsubscribe();
+          resolve(true);
+        });
+
+        console.log("[WebSocket] Sending test message");
+        this.client.publish({
+          destination: "/app/test",
+          body: "Test message from client at " + new Date().toISOString(),
+        });
+
+        // Set a timeout in case we don't get a response
+        setTimeout(() => {
+          console.error("[WebSocket] Test timed out");
+          subscription.unsubscribe();
+          resolve(false);
+        }, 5000);
+      } catch (error) {
+        console.error("[WebSocket] Test error:", error);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Ensure we have a connection, attempting to connect if needed
    */
   public async ensureConnected(
     userId?: number,
@@ -1573,6 +1734,34 @@ class WebSocketService {
 
     console.error("[WebSocket] Not connected and no credentials available");
     return false;
+  }
+
+  /**
+   * Test connection to help diagnose Cloud Run issues
+   */
+  public async testCloudRunConnection(): Promise<boolean> {
+    try {
+      // First, try a simple HTTP fetch to the debug endpoint
+      const wsUrl = this.WS_URL.replace("http://", "https://");
+      const debugUrl = `${wsUrl.split("/ws")[0]}/websocket-debug/health`;
+
+      console.log(`[WebSocket] Testing HTTP connection to ${debugUrl}`);
+
+      const response = await fetch(debugUrl);
+      const data = await response.json();
+
+      console.log(`[WebSocket] HTTP test result: ${response.status}`, data);
+
+      if (!response.ok) {
+        return false;
+      }
+
+      // Now test the WebSocket connection itself
+      return this.testConnection();
+    } catch (error) {
+      console.error("[WebSocket] Cloud Run connection test failed:", error);
+      return false;
+    }
   }
 }
 

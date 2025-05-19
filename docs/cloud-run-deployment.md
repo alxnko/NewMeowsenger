@@ -103,7 +103,7 @@ If you encounter issues:
 2. Verify your environment variables are correctly set
 3. Check that required APIs are enabled: `gcloud services list`
 4. Ensure your Docker images built correctly: `docker images`
-5. Test database connectivity: `gcloud sql connect meowsenger-db --user=postgres`
+5. Test database connectivity: `gcloud sql connect meowsenger --user=postgres`
 
 ### Common Database Issues
 

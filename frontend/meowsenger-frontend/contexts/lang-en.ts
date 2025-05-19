@@ -4,6 +4,7 @@ const en = {
   profile: "profile",
   settings: "settings",
   logout: "logout",
+  games: "games",
   // Home page
   home_title: "use meowsenger for messaging",
   home_subtitle: "beautiful, fast and modern messenger",
@@ -193,7 +194,13 @@ const en = {
   // Cookie consent
   cookie_consent: "cookie settings",
   cookie_consent_description:
-    "this site uses cookies to improve your experience. by continuing to use this site, you agree to our use of cookies for analytics, personalization, and advertising.",
+    "this site uses cookies to improve your experience. by continuing to use this site, you agree to our use of cookies for authentication, preferences, and essential functionality.",
+  cookies_we_use: "cookies we use",
+  auth_cookies: "authentication cookies - to keep you logged in securely",
+  preference_cookies:
+    "preference cookies - to remember your language and theme",
+  functional_cookies:
+    "functional cookies - to provide core features of the app",
   select_your_language: "select your language",
   select_theme: "select theme",
   auto_detected_language: "automatically detected from your browser",
@@ -201,6 +208,7 @@ const en = {
   preferences_not_saved:
     "these preferences will not be saved until you log in. we've automatically detected your device settings.",
   accept_and_continue: "accept and continue",
+  not_available_now: "not available now",
 };
 
 export default en;
