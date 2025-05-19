@@ -104,26 +104,31 @@ const MemoizedMessage = memo(
     username: string | undefined;
     onReply: (message: MessageData) => void;
     onEdit: (message: MessageData) => void;
-  }) => (
-    <Message
-      content={message.content}
-      timestamp={message.timestamp}
-      sender={message.sender.name}
-      isOwn={message.sender.name === username}
-      isPending={message.isPending}
-      isRead={message.isRead}
-      isEdited={message.isEdited}
-      isForwarded={message.isForwarded}
-      isSystem={message.isSystem}
-      systemMessageType={message.systemMessageType}
-      systemMessageParams={message.systemMessageParams}
-      replyTo={message.replyTo}
-      replyMessage={message.replyMessage}
-      messageId={message.messageId}
-      onReply={() => onReply(message)}
-      onEdit={() => onEdit(message)}
-    />
-  )
+  }) => {
+    // Correctly determine if the message is from the current user
+    const isOwnMessage = Boolean(username && message.sender.name === username);
+
+    return (
+      <Message
+        content={message.content}
+        timestamp={message.timestamp}
+        sender={message.sender.name}
+        isOwn={isOwnMessage}
+        isPending={message.isPending}
+        isRead={message.isRead}
+        isEdited={message.isEdited}
+        isForwarded={message.isForwarded}
+        isSystem={message.isSystem}
+        systemMessageType={message.systemMessageType}
+        systemMessageParams={message.systemMessageParams}
+        replyTo={message.replyTo}
+        replyMessage={message.replyMessage}
+        messageId={message.messageId}
+        onReply={() => onReply(message)}
+        onEdit={() => onEdit(message)}
+      />
+    );
+  }
 );
 
 MemoizedMessage.displayName = "MemoizedMessage";

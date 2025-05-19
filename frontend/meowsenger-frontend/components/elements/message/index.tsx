@@ -199,9 +199,6 @@ export const Message = memo(
         <div
           className={clsx(
             "absolute top-0 z-20",
-            // Improved mobile visibility with touch-specific classes
-            "opacity-0 hover:opacity-100 touch:opacity-100",
-            // Increased touch target and positioning
             "w-10 h-10 flex items-center justify-center",
             isOwn ? "left-[-40px]" : "right-[-40px]"
           )}
