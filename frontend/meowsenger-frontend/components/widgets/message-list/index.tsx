@@ -208,31 +208,36 @@ export const MessageList = memo(
     // Memoize message data conversion to avoid recalculation on every render
     const messageDataList = useMemo(
       () =>
-        safeMessages.map((msg) => ({
-          id: msg.id,
-          content: msg.text,
-          timestamp: new Date(msg.time * 1000),
-          sender: {
-            id: msg.author,
-            name:
-              typeof msg.author === "string"
-                ? msg.author
-                : `User ${msg.author}`,
-          },
-          isPending: msg.isPending,
-          isRead: msg.isRead,
-          isDeleted: msg.isDeleted,
-          isEdited: msg.isEdited,
-          isSystem: msg.isSystem,
-          isForwarded: msg.isForwarded,
-          systemMessageType: msg.system_message_type,
-          systemMessageParams: msg.system_message_params,
-          replyTo: msg.replyTo,
-          messageId: msg.id,
-          replyMessage: msg.replyTo
-            ? getReplyMessageInfo(msg.replyTo)
-            : undefined,
-        })),
+        safeMessages.map((msg) => {
+          // Convert Unix timestamp to JavaScript Date with proper timezone handling
+          const localTimestamp = new Date(msg.time * 1000);
+
+          return {
+            id: msg.id,
+            content: msg.text,
+            timestamp: localTimestamp,
+            sender: {
+              id: msg.author,
+              name:
+                typeof msg.author === "string"
+                  ? msg.author
+                  : `User ${msg.author}`,
+            },
+            isPending: msg.isPending,
+            isRead: msg.isRead,
+            isDeleted: msg.isDeleted,
+            isEdited: msg.isEdited,
+            isSystem: msg.isSystem,
+            isForwarded: msg.isForwarded,
+            systemMessageType: msg.system_message_type,
+            systemMessageParams: msg.system_message_params,
+            replyTo: msg.replyTo,
+            messageId: msg.id,
+            replyMessage: msg.replyTo
+              ? getReplyMessageInfo(msg.replyTo)
+              : undefined,
+          };
+        }),
       [safeMessages, getReplyMessageInfo]
     );
 

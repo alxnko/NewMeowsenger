@@ -19,6 +19,7 @@ export default function Home() {
       <Container>
         <div className="inline-block max-w-xl text-center justify-center">
           <span className={title()}>{t("home_title").split(" ")[0] + " "}</span>
+          <br />
           <span className={title({ color: "green" })}>meowsenger</span>
           <br />
           <span className={title()}>

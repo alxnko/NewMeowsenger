@@ -234,14 +234,28 @@ export const formatRelativeTime = (
   date: Date | number | string,
   t: (key: string, params?: any) => string
 ): string => {
+  // Use local time for both dates
   const now = new Date();
-  const parsedDate = typeof date === "object" ? date : new Date(date);
-  const seconds = Math.round((now.getTime() - parsedDate.getTime()) / 1000);
-  const minutes = Math.round(seconds / 60);
-  const hours = Math.round(minutes / 60);
-  const days = Math.round(hours / 24);
-  const months = Math.round(days / 30);
-  const years = Math.round(days / 365);
+
+  // Ensure we're working with a proper Date object in local time
+  const parsedDate =
+    typeof date === "object"
+      ? date
+      : new Date(typeof date === "number" ? date : date);
+
+  // Calculate the time difference in seconds using local time
+  const seconds = Math.floor((now.getTime() - parsedDate.getTime()) / 1000);
+
+  // Don't allow negative time differences (future dates)
+  if (seconds < 0) {
+    return t("less_than_x_seconds_ago");
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
 
   // Helper function for pluralization with language-specific rules
   const pluralize = (
