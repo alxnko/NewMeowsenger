@@ -27,12 +27,15 @@ public class Message {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String text;
     
+    @Builder.Default
     @Column(name = "is_deleted")
     private boolean isDeleted = false;
     
+    @Builder.Default
     @Column(name = "is_edited")
     private boolean isEdited = false;
     
+    @Builder.Default
     @Column(name = "is_system")
     private boolean isSystem = false;
     
@@ -50,10 +53,12 @@ public class Message {
     @Column(name = "reply_to")
     private Long replyTo; // Changed from Integer to Long
     
+    @Builder.Default
     @Column(name = "is_forwarded")
     private boolean isForwarded = false;
     
     // Updated ManyToMany mapping to use the correct table name
+    @Builder.Default
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "user_message",  // Match Django table name
@@ -63,6 +68,7 @@ public class Message {
     private Set<User> unreadBy = new HashSet<>();
     
     // Just for reference, don't modify through Spring
+    @Builder.Default
     @OneToMany(mappedBy = "message", fetch = FetchType.LAZY)
     private Set<Update> updates = new HashSet<>();
 }

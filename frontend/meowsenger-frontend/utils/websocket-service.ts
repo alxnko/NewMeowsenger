@@ -19,7 +19,13 @@ export interface WebSocketMessage {
     | "READ"
     | "CHAT_UPDATE"
     | "ADMIN_STATUS_CHANGE" // New type for admin status change notifications
-    | "USER_REMOVED"; // New type for user removal notifications
+    | "USER_REMOVED" // New type for user removal notifications
+    | "GAME_MESSAGE" // Game-related message types
+    | "GAME_CREATE"
+    | "GAME_JOIN"
+    | "GAME_MOVE"
+    | "GAME_INVITE"
+    | "GAME_STATE";
   chatId: number;
   userId: number;
   content: string;
@@ -64,6 +70,12 @@ export interface WebSocketMessage {
   // Chat settings change fields
   updateMessage?: string; // Message about what changed
 
+  // Game-specific fields
+  gameType?: string; // Type of game (tictactoe, etc.)
+  gameId?: string; // ID of the game
+  gameData?: any; // Game-specific data
+  action?: string; // Game action (create, join, move, etc.)
+
   // Internal fields for message queue management
   __destination?: string; // Internal field for tracking destination when queuing messages
 }
@@ -88,6 +100,7 @@ const WS_CONSTANTS = {
     MEMBER_REMOVED: "/app/chat.member-removed",
     MEMBER_ADDED: "/app/chat.member-added",
     SETTINGS_CHANGED: "/app/chat.settings-changed",
+    PING: "/app/ping",
   },
   SUBSCRIPTION_PREFIXES: {
     CHAT: "chat_",
@@ -99,9 +112,11 @@ const WS_CONSTANTS = {
     MEMBER_ADDITIONS: "member_additions_",
   },
   CONNECTION: {
-    MAX_RECONNECT_ATTEMPTS: 10, // Increased from 5
-    RECONNECT_DELAY: 3000, // Decreased from 5000
-    CONNECTION_TIMEOUT: 20000, // Increased from 10000
+    MAX_RECONNECT_ATTEMPTS: 15, // Increased from 10
+    RECONNECT_DELAY: 2000, // Decreased from 3000
+    CONNECTION_TIMEOUT: 20000, // Keeps same as before
+    PING_INTERVAL: 20000, // Decreased from 45000
+    HEALTH_CHECK_INTERVAL: 60000, // New: interval to check connection health
   },
   STORAGE_KEYS: {
     WS_CONNECTED: "ws_connected",
@@ -123,6 +138,10 @@ class WebSocketService {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private connectionTimeout: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private lastPingTime: number = 0;
+  private lastPongTime: number = 0;
+  private connectionToken: string | null = null; // Store token for reconnections
 
   // Base WebSocket URL - SockJS requires http/https URLs
   private readonly WS_URL = (() => {
@@ -163,6 +182,7 @@ class WebSocketService {
       }
 
       this.userId = userId;
+      this.connectionToken = token; // Store token for reconnections
       console.log("[WebSocket] Attempting to connect...");
 
       // Use the preconfigured URL - SockJS requires http/https, not ws/wss
@@ -186,6 +206,10 @@ class WebSocketService {
 
       // Configure client event handlers
       this.setupClientHandlers(resolve, token);
+
+      // Reset ping/pong times
+      this.lastPingTime = Date.now();
+      this.lastPongTime = Date.now();
 
       // Activate the client
       try {
@@ -228,6 +252,10 @@ class WebSocketService {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
     }
   }
 
@@ -456,6 +484,7 @@ class WebSocketService {
       console.log("[WebSocket] Connected successfully");
       this.connected = true;
       this.reconnectAttempts = 0;
+      this.lastPongTime = Date.now(); // Connection is a successful "pong"
 
       // Update connection status
       this.updateConnectionStatus(true);
@@ -465,6 +494,9 @@ class WebSocketService {
 
       // Setup heartbeat for connection monitoring
       this.setupHeartbeat();
+
+      // Setup health check
+      this.setupHealthCheck();
 
       resolve(true);
     };
@@ -485,8 +517,10 @@ class WebSocketService {
       resolve(false);
     };
 
-    this.client.onWebSocketClose = () => {
-      console.log("[WebSocket] Connection closed");
+    this.client.onWebSocketClose = (event) => {
+      console.log(
+        `[WebSocket] Connection closed: code=${event?.code}, reason=${event?.reason}`
+      );
       this.connected = false;
       this.updateConnectionStatus(false);
       this.attemptReconnection(token);
@@ -502,19 +536,131 @@ class WebSocketService {
       clearInterval(this.heartbeatInterval);
     }
 
+    // Subscribe to pong responses from server
+    if (this.client && this.connected) {
+      this.client.subscribe("/topic/pong", (message: IMessage) => {
+        try {
+          const pong = JSON.parse(message.body);
+          this.lastPongTime = Date.now();
+          console.debug("[WebSocket] Received pong:", pong);
+        } catch (error) {
+          console.error("[WebSocket] Error parsing pong message:", error);
+        }
+      });
+    }
+
     // Set up a new heartbeat check
     this.heartbeatInterval = setInterval(() => {
       if (this.client && this.connected) {
-        // Simple ping to verify connection is still alive
-        this.client.publish({
-          destination: "/app/ping",
-          body: "{}",
-          headers: { "content-type": "application/json" },
-        });
+        try {
+          this.lastPingTime = Date.now();
+          // Simple ping to verify connection is still alive
+          this.client.publish({
+            destination: WS_CONSTANTS.DESTINATIONS.PING,
+            body: JSON.stringify({
+              timestamp: this.lastPingTime,
+              clientId: `${this.userId}-${Math.random()
+                .toString(36)
+                .substring(2, 10)}`,
+            }),
+            headers: { "content-type": "application/json" },
+          });
+          console.debug(
+            `[WebSocket] Ping sent at ${new Date(
+              this.lastPingTime
+            ).toISOString()}`
+          );
+        } catch (error) {
+          console.error("[WebSocket] Error sending ping:", error);
+          // If ping fails, consider the connection failed
+          this.reconnectIfNeeded();
+        }
       } else {
         clearInterval(this.heartbeatInterval!);
       }
-    }, 45000); // 45 seconds
+    }, WS_CONSTANTS.CONNECTION.PING_INTERVAL);
+  }
+
+  /**
+   * Set up health check to detect stale connections
+   */
+  private setupHealthCheck(): void {
+    // Clear any existing health check
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    // Set up a new health check interval
+    this.healthCheckInterval = setInterval(() => {
+      if (!this.connected) {
+        clearInterval(this.healthCheckInterval!);
+        return;
+      }
+
+      // Check if we've received any messages recently
+      const now = Date.now();
+      const timeSinceLastPing = now - this.lastPingTime;
+      const timeSinceLastPong = now - this.lastPongTime;
+
+      // If we haven't received any message in a while, reconnect
+      if (timeSinceLastPong > 2 * WS_CONSTANTS.CONNECTION.PING_INTERVAL) {
+        console.warn(
+          `[WebSocket] No activity detected for ${timeSinceLastPong}ms, checking connection...`
+        );
+
+        // Test the connection
+        this.testConnection()
+          .then((isConnected) => {
+            if (!isConnected) {
+              console.error(
+                "[WebSocket] Connection test failed, forcing reconnection"
+              );
+              this.forceReconnect();
+            } else {
+              console.log("[WebSocket] Connection test succeeded");
+              this.lastPongTime = Date.now(); // Update last pong time
+            }
+          })
+          .catch((error) => {
+            console.error("[WebSocket] Connection test error:", error);
+            this.forceReconnect();
+          });
+      }
+    }, WS_CONSTANTS.CONNECTION.HEALTH_CHECK_INTERVAL);
+  }
+
+  /**
+   * Force reconnection even if client thinks it's connected
+   */
+  private forceReconnect(): void {
+    console.log("[WebSocket] Forcing reconnection");
+
+    // Clean up existing connection
+    if (this.client) {
+      try {
+        this.client.deactivate();
+      } catch (error) {
+        console.error("[WebSocket] Error deactivating client:", error);
+      }
+    }
+
+    this.client = null;
+    this.connected = false;
+    this.updateConnectionStatus(false);
+
+    // Attempt reconnection with stored credentials
+    if (this.userId && this.connectionToken) {
+      this.attemptReconnection(this.connectionToken);
+    }
+  }
+
+  /**
+   * Check if reconnection is needed and trigger it
+   */
+  private reconnectIfNeeded(): void {
+    if (!this.connected && this.userId && this.connectionToken) {
+      this.attemptReconnection(this.connectionToken);
+    }
   }
 
   /**
@@ -557,12 +703,35 @@ class WebSocketService {
       this.reconnectAttempts >= WS_CONSTANTS.CONNECTION.MAX_RECONNECT_ATTEMPTS
     ) {
       console.error("[WebSocket] Max reconnection attempts reached");
+
+      // Still try one more time after a longer delay
+      setTimeout(() => {
+        console.log(
+          "[WebSocket] Making one final reconnection attempt after max attempts"
+        );
+        this.reconnectAttempts = 0;
+        if (this.userId) {
+          this.connect(this.userId, token);
+        }
+      }, 10000); // Wait 10 seconds before the final attempt
+
       return;
     }
 
     this.reconnectAttempts++;
+    const baseDelay = WS_CONSTANTS.CONNECTION.RECONNECT_DELAY;
+    // Use exponential backoff with some jitter to avoid thundering herd
+    const delay = Math.min(
+      baseDelay *
+        Math.pow(1.5, this.reconnectAttempts - 1) *
+        (0.9 + Math.random() * 0.2),
+      30000 // Max 30 seconds
+    );
+
     console.log(
-      `[WebSocket] Attempting to reconnect (${this.reconnectAttempts}/${WS_CONSTANTS.CONNECTION.MAX_RECONNECT_ATTEMPTS})...`
+      `[WebSocket] Attempting to reconnect (${this.reconnectAttempts}/${
+        WS_CONSTANTS.CONNECTION.MAX_RECONNECT_ATTEMPTS
+      }) in ${Math.round(delay)}ms...`
     );
 
     // Clear any existing reconnect timer
@@ -577,7 +746,7 @@ class WebSocketService {
           console.error("[WebSocket] Failed to reconnect:", err)
         );
       }
-    }, WS_CONSTANTS.CONNECTION.RECONNECT_DELAY);
+    }, delay);
   }
 
   /**
@@ -677,6 +846,10 @@ class WebSocketService {
         console.log(
           `[WebSocket] Received message on ${channel} channel for chat ${chatId}`
         );
+
+        // Update lastPongTime to indicate the connection is still alive
+        this.lastPongTime = Date.now();
+
         const receivedMessage: WebSocketMessage = JSON.parse(message.body);
         callback(receivedMessage);
       } catch (error) {
@@ -784,6 +957,9 @@ class WebSocketService {
       (message: IMessage) => {
         try {
           console.log("[WebSocket] Received chat update notification");
+          // Update lastPongTime to indicate the connection is still alive
+          this.lastPongTime = Date.now();
+
           const receivedMessage: WebSocketMessage = JSON.parse(message.body);
           callback(receivedMessage);
         } catch (error) {
@@ -799,6 +975,9 @@ class WebSocketService {
     const broadcastDestination = `/topic/user.${userId}.chat-updates`;
     this.client.subscribe(broadcastDestination, (message: IMessage) => {
       try {
+        // Update lastPongTime to indicate the connection is still alive
+        this.lastPongTime = Date.now();
+
         const receivedMessage: WebSocketMessage = JSON.parse(message.body);
         callback(receivedMessage);
       } catch (error) {
@@ -898,6 +1077,9 @@ class WebSocketService {
       userDestination,
       (message: IMessage) => {
         try {
+          // Update lastPongTime to indicate the connection is still alive
+          this.lastPongTime = Date.now();
+
           const receivedMessage: WebSocketMessage = JSON.parse(message.body);
 
           if (
@@ -924,6 +1106,9 @@ class WebSocketService {
     const broadcastDestination = `/topic/user.${userId}.chat-updates`;
     this.client.subscribe(broadcastDestination, (message: IMessage) => {
       try {
+        // Update lastPongTime to indicate the connection is still alive
+        this.lastPongTime = Date.now();
+
         const receivedMessage: WebSocketMessage = JSON.parse(message.body);
 
         if (
@@ -1016,6 +1201,9 @@ class WebSocketService {
       destination,
       (message: IMessage) => {
         try {
+          // Update lastPongTime to indicate the connection is still alive
+          this.lastPongTime = Date.now();
+
           const receivedMessage: WebSocketMessage = JSON.parse(message.body);
           callback(receivedMessage);
         } catch (error) {
@@ -1685,6 +1873,183 @@ class WebSocketService {
         resolve(false);
       }
     });
+  }
+
+  /**
+   * Send a message to a specific WebSocket destination
+   * @param message The message to send
+   * @param destination Optional custom destination, defaults to '/app/chat.send'
+   * @returns Promise<boolean> indicating if the message was sent
+   */
+  public async sendMessage(
+    message: WebSocketMessage,
+    destination: string = "/app/chat.send"
+  ): Promise<boolean> {
+    try {
+      if (!this.connected) {
+        console.error("[WebSocket] Cannot send message - not connected");
+        return false;
+      }
+
+      if (!this.client) {
+        console.error(
+          "[WebSocket] Cannot send message - client not initialized"
+        );
+        return false;
+      }
+
+      // Send the message to the specified destination
+      this.client.publish({
+        destination,
+        body: JSON.stringify(message),
+      });
+
+      return true;
+    } catch (error) {
+      console.error("[WebSocket] Error sending message:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get available chats for the current user
+   * @returns Promise<Array<{id: number, name: string}>> List of available chats
+   */
+  public async getAvailableChats(): Promise<
+    Array<{ id: number; name: string }>
+  > {
+    try {
+      // First try to get chats from local storage
+      const storedChats = localStorage.getItem("recentChats");
+      if (storedChats) {
+        return JSON.parse(storedChats);
+      }
+
+      // If no stored chats, return a default chat
+      // In a real implementation, this would make an API call
+      return [{ id: 1, name: "General" }];
+    } catch (error) {
+      console.error("[WebSocket] Error getting available chats:", error);
+      return [{ id: 1, name: "General" }]; // Default fallback
+    }
+  }
+
+  /**
+   * Send a game message
+   * @param userId The user ID sending the message
+   * @param gameId The game ID
+   * @param content The message content (should be JSON stringified game data)
+   * @param gameType The type of game (e.g., "tictactoe")
+   * @param action The game action (e.g., "create", "join", "move")
+   * @returns Promise<boolean> success indicator
+   */
+  public async sendGameMessage(
+    userId: number,
+    gameId: string,
+    content: string,
+    gameType: string = "tictactoe",
+    action: string = "message"
+  ): Promise<boolean> {
+    try {
+      if (!this.connected) {
+        console.error("[WebSocket] Cannot send game message: not connected");
+        return false;
+      }
+
+      const message: WebSocketMessage = {
+        type: "GAME_MESSAGE",
+        userId: userId,
+        chatId: 0, // Use 0 as a special value for game messages
+        content: content,
+        timestamp: new Date().toISOString(),
+        gameType: gameType,
+        gameId: gameId,
+        action: action,
+      };
+
+      // Send to the appropriate game destination
+      let destination = `/app/game.${action.toLowerCase()}`;
+
+      // Queue the message so it can be retried if needed
+      this.sendOrQueueMessage(message, destination);
+
+      return true;
+    } catch (error) {
+      console.error("[WebSocket] Error sending game message:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Subscribe to game events
+   * @param gameId The game ID to subscribe to
+   * @param callback The callback to invoke when a game event is received
+   * @returns The subscription ID
+   */
+  public subscribeToGameEvents(
+    gameId: string,
+    callback: MessageCallback
+  ): string {
+    const subscriptionKey = `game_${gameId}`;
+
+    // Check if we're already subscribed
+    if (this.subscriptions.has(subscriptionKey)) {
+      console.log(`[WebSocket] Already subscribed to game ${gameId}`);
+      return this.subscriptions.get(subscriptionKey)!.id;
+    }
+
+    try {
+      // Subscribe to the game-specific topic
+      const destination = `/topic/game.${gameId}`;
+
+      const subscription = this.client?.subscribe(
+        destination,
+        (message) => {
+          try {
+            const body = JSON.parse(message.body);
+            callback(body);
+          } catch (e) {
+            console.error("[WebSocket] Error parsing game event:", e);
+          }
+        },
+        { id: subscriptionKey }
+      );
+
+      if (subscription) {
+        this.subscriptions.set(subscriptionKey, {
+          id: subscription.id,
+          callback,
+        });
+
+        console.log(`[WebSocket] Subscribed to game ${gameId}`);
+        return subscription.id;
+      } else {
+        console.error(`[WebSocket] Failed to subscribe to game ${gameId}`);
+        return "";
+      }
+    } catch (error) {
+      console.error("[WebSocket] Error subscribing to game events:", error);
+      return "";
+    }
+  }
+
+  /**
+   * Unsubscribe from game events
+   * @param gameId The game ID to unsubscribe from
+   */
+  public unsubscribeFromGameEvents(gameId: string): void {
+    const subscriptionKey = `game_${gameId}`;
+
+    try {
+      if (this.subscriptions.has(subscriptionKey)) {
+        const subscription = this.subscriptions.get(subscriptionKey)!;
+        this.client?.unsubscribe(subscription.id);
+        this.subscriptions.delete(subscriptionKey);
+        console.log(`[WebSocket] Unsubscribed from game ${gameId}`);
+      }
+    } catch (error) {
+      console.error("[WebSocket] Error unsubscribing from game events:", error);
+    }
   }
 
   /**

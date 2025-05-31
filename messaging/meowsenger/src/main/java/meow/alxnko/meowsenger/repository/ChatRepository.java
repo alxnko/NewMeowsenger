@@ -21,6 +21,11 @@ public interface ChatRepository extends JpaRepository<Chat, Long> {
     @Query("SELECT COUNT(c) > 0 FROM Chat c JOIN c.users u WHERE c.id = :chatId AND u.id = :userId")
     boolean isUserInChat(Long chatId, Long userId);
     
+    // Alias method for isUserInChat for better readability in some contexts
+    default boolean isMember(Long chatId, Long userId) {
+        return isUserInChat(chatId, userId);
+    }
+    
     // Fetch chat with users eagerly loaded
     @Query("SELECT c FROM Chat c LEFT JOIN FETCH c.users WHERE c.id = :chatId")
     Optional<Chat> findByIdWithUsers(Long chatId);

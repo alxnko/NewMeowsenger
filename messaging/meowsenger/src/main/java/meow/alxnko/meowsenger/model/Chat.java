@@ -29,13 +29,16 @@ public class Chat {
     private Long id; // Changed from Integer to Long for consistency
     
     @Column(name = "is_group")
+    @Builder.Default
     private boolean isGroup = false;
     
     private String name;
     
+    @Builder.Default
     private String description = "meowsenger group";
     
     @Column(name = "is_verified")
+    @Builder.Default
     private boolean isVerified = false;
     
     @Column(length = 64)
@@ -51,6 +54,7 @@ public class Chat {
         joinColumns = @JoinColumn(name = "chat_id"),
         inverseJoinColumns = @JoinColumn(name = "user_id")
     )
+    @Builder.Default
     private Set<User> users = new HashSet<>();
     
     // Don't use cascade operations since Django manages this
@@ -60,13 +64,16 @@ public class Chat {
         joinColumns = @JoinColumn(name = "chat_id"),
         inverseJoinColumns = @JoinColumn(name = "user_id")
     )
+    @Builder.Default
     private Set<User> admins = new HashSet<>();
     
     // Just for reference, don't modify through Spring
     @OneToMany(mappedBy = "chat", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<Message> messages = new HashSet<>();
     
     // Just for reference, don't modify through Spring
     @OneToMany(mappedBy = "chat", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<Update> updates = new HashSet<>();
 }

@@ -339,7 +339,6 @@ export default function GroupChatPage() {
                               >
                                 {t("remove_from_group")}
                               </DropdownItem>
-
                               {isMemberAdmin ? (
                                 <DropdownItem
                                   key="demote"

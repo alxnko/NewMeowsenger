@@ -5,9 +5,14 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import lombok.Data;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import meow.alxnko.meowsenger.config.UserChannelInterceptor;
 import meow.alxnko.meowsenger.config.UserChannelInterceptor.WebSocketDisconnectEvent;
 import meow.alxnko.meowsenger.model.Chat;
@@ -26,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * Service for WebSocket operations
@@ -50,8 +56,26 @@ public class WebSocketService {
     // Map to track typing status
     private final Map<Long, Map<Long, LocalDateTime>> userTypingStatus = new ConcurrentHashMap<>();
     
+    // Collection to track all active WebSocket subscriptions
+    private final Set<WebSocketSubscription> registeredSubscriptions = ConcurrentHashMap.newKeySet();
+    
     @Value("${spring.profiles.active:default}")
     private String activeProfile;
+    
+    /**
+     * Inner class to represent a WebSocket subscription
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    private static class WebSocketSubscription {
+        private String sessionId;
+        private Long userId;
+        private Long chatId;
+        private String gameId;
+        private LocalDateTime subscriptionTime;
+    }
     
     /**
      * Register a new WebSocket session for a user
@@ -100,48 +124,55 @@ public class WebSocketService {
     }
     
     /**
-     * Subscribe a user to a chat room
+     * Subscribe a user to a chat
+     * 
+     * @param chatId The chat ID
+     * @param userId The user ID
+     * @param sessionId The session ID
+     * @return WebSocketMessage with JOIN type
      */
-    @Transactional
     public WebSocketMessage subscribeUserToChat(Long chatId, Long userId, String sessionId) {
-        // First check if chat exists
-        Chat chat = chatRepository.findById(chatId)
-                .orElse(null);
-        if (chat == null) {
-            return createErrorMessage("Chat not found");
+        // If this is a game message (chatId = 0 or message type contains GAME), 
+        // we bypass the membership check
+        boolean isGameRelated = chatId != null && chatId == 0;
+        
+        if (!isGameRelated) {
+            // Only check membership for non-game messages
+            try {
+                // Verify that the user is a member of the chat before subscribing
+                boolean isMember = chatRepository.isMember(chatId, userId);
+                
+                if (!isMember) {
+                    log.error("User {} is not a member of chat {}, cannot subscribe", userId, chatId);
+                    throw new AccessDeniedException("User is not a member of this chat");
+                }
+            } catch (Exception e) {
+                log.error("Error verifying chat membership for user {} in chat {}: {}", 
+                        userId, chatId, e.getMessage());
+                throw new RuntimeException("Failed to verify chat membership", e);
+            }
         }
         
-        // Check if user exists
-        User user = userRepository.findById(userId)
-                .orElse(null);
-        if (user == null) {
-            return createErrorMessage("User not found");
-        }
-        
-        // Check if user is member of the chat with direct query
-        if (!chatRepository.isUserInChat(chatId, userId)) {
-            return createErrorMessage("User is not a member of this chat");
-        }
-        
-        // Add user to chat room
-        userChatSessions.computeIfAbsent(chatId, k -> new HashMap<>()).put(userId, sessionId);
+        // Register this subscription in our tracking data
+        registeredSubscriptions.add(
+            WebSocketSubscription.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .chatId(chatId)
+                .subscriptionTime(LocalDateTime.now())
+                .build()
+        );
         
         log.info("User {} subscribed to chat {}", userId, chatId);
         
-        // Create a subscription confirmation message - but don't broadcast it
-        WebSocketMessage confirmationMessage = WebSocketMessage.builder()
+        // Return confirmation message
+        return WebSocketMessage.builder()
                 .type(WebSocketMessage.MessageType.JOIN)
-                .userId(userId)
                 .chatId(chatId)
-                .username(user.getUsername())
+                .userId(userId)
                 .content("User subscribed to chat")
                 .timestamp(LocalDateTime.now())
-                .isGroup(chat.isGroup())
-                .chatName(chat.getName())
                 .build();
-                
-        // Return the confirmation without broadcasting to other users
-        return confirmationMessage;
     }
     
     /**
@@ -153,6 +184,13 @@ public class WebSocketService {
         Long userId = inputMessage.getUserId();
         String content = inputMessage.getContent();
         Long replyToId = inputMessage.getReplyTo();
+        
+        // Check if this is a game message (chatId == 0 or GAME_MESSAGE type)
+        if ((chatId != null && chatId == 0) || 
+            (inputMessage.getType() != null && inputMessage.getType() == WebSocketMessage.MessageType.GAME_MESSAGE)) {
+            log.info("Detected game message, using game-specific handler");
+            return processGameMessage(inputMessage);
+        }
         
         // Check if this is a forwarded message
         Boolean isForwarded = inputMessage.getIsForwarded();
@@ -1024,5 +1062,235 @@ public class WebSocketService {
      */
     public String getPrivateDestination(Long userId) {
         return "/user/" + userId + "/queue/messages";
+    }
+    
+    /**
+     * Send a message to a specific user with any object type as payload
+     * Used for game-related messages and other non-WebSocketMessage communications
+     * 
+     * @param userId The ID of the user to send the message to
+     * @param destination The destination sub-path (e.g., "/queue/games")
+     * @param payload The payload to send (can be any object)
+     */
+    public <T> void sendToUser(Long userId, String destination, T payload) {
+        String userDestination = "/user/" + userId + destination;
+        messagingTemplate.convertAndSend(userDestination, payload);
+        log.debug("Sent message to user destination: {}", userDestination);
+    }
+    
+    /**
+     * Get a game-specific topic destination
+     */
+    public String getGameTopicDestination(String gameId) {
+        return "/topic/game." + gameId;
+    }
+    
+    /**
+     * Get a user-specific game destination
+     */
+    public String getGameUserDestination(Long userId) {
+        return "/user/" + userId + "/queue/game-events";
+    }
+    
+    /**
+     * Subscribe a user to game events, bypassing chat membership checks
+     * 
+     * @param gameId The game ID
+     * @param userId The user ID
+     * @param sessionId The session ID
+     * @return WebSocketMessage with JOIN type
+     */
+    public WebSocketMessage subscribeToGameEvents(String gameId, Long userId, String sessionId) {
+        if (gameId == null || gameId.trim().isEmpty()) {
+            log.error("Cannot subscribe to game events: game ID is null or empty");
+            throw new IllegalArgumentException("Game ID cannot be null or empty");
+        }
+        
+        // Register this subscription in our tracking data
+        registeredSubscriptions.add(
+            WebSocketSubscription.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .chatId(0L) // Use chatId=0 for games
+                .gameId(gameId) // Store the game ID
+                .subscriptionTime(LocalDateTime.now())
+                .build()
+        );
+        
+        log.info("User {} subscribed to game events for game {}", userId, gameId);
+        
+        // Get the username
+        String username = userRepository.findById(userId)
+            .map(User::getUsername)
+            .orElse("Unknown");
+        
+        // Return confirmation message
+        return WebSocketMessage.builder()
+                .type(WebSocketMessage.MessageType.GAME_JOIN)
+                .chatId(0L) // Use chatId=0 for games
+                .userId(userId)
+                .username(username)
+                .gameId(gameId) // Include the game ID
+                .content("User subscribed to game events")
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+    
+    /**
+     * Broadcast a game message to all subscribers of a game topic
+     * 
+     * @param message The message to broadcast
+     */
+    public void broadcastGameMessage(WebSocketMessage message) {
+        // For game messages, always set type to GAME_MESSAGE if not already a game type
+        if (!message.getType().name().startsWith("GAME_")) {
+            message.setType(WebSocketMessage.MessageType.GAME_MESSAGE);
+        }
+        
+        // Set chatId to 0 for game messages
+        message.setChatId(0L);
+        
+        // Set isGameMessage flag
+        message.setIsGameMessage(true);
+        
+        // Set timestamp if not already set
+        if (message.getTimestamp() == null) {
+            message.setTimestamp(LocalDateTime.now());
+        }
+        
+        // Get the game ID from the message
+        String gameId = message.getGameId();
+        if (gameId == null && message.getContent() != null) {
+            // Try to extract from content if needed
+            try {
+                if (message.getContent().startsWith("{")) {
+                    // Crude JSON extraction - in production use a proper JSON parser
+                    int start = message.getContent().indexOf("\"gameId\":");
+                    if (start > 0) {
+                        int valueStart = message.getContent().indexOf("\"", start + 9) + 1;
+                        int valueEnd = message.getContent().indexOf("\"", valueStart);
+                        if (valueStart > 0 && valueEnd > valueStart) {
+                            gameId = message.getContent().substring(valueStart, valueEnd);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error extracting game ID from message content", e);
+            }
+        }
+        
+        if (gameId == null) {
+            log.error("Cannot broadcast game message: game ID is not specified");
+            return;
+        }
+        
+        // Broadcast to the game topic
+        String destination = "/topic/game." + gameId;
+        messagingTemplate.convertAndSend(destination, message);
+        
+        log.debug("Broadcast game message to {}: {}", destination, message);
+    }
+
+    /**
+     * Process a game-specific message
+     * This bypasses chat membership checks and other chat-specific logic
+     */
+    private WebSocketMessage processGameMessage(WebSocketMessage inputMessage) {
+        Long userId = inputMessage.getUserId();
+        
+        // Validate the user exists
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return createErrorMessage("User not found");
+        }
+        
+        // For game messages, we need to extract the game ID from the content
+        String gameId = null;
+        try {
+            // Try to parse the content as JSON to extract gameId
+            if (inputMessage.getContent() != null && inputMessage.getContent().contains("gameId")) {
+                // Simple extraction - in production use a proper JSON parser
+                String content = inputMessage.getContent();
+                int gameIdStart = content.indexOf("\"gameId\":");
+                if (gameIdStart >= 0) {
+                    int valueStart = content.indexOf("\"", gameIdStart + 9) + 1;
+                    int valueEnd = content.indexOf("\"", valueStart);
+                    if (valueStart > 0 && valueEnd > valueStart) {
+                        gameId = content.substring(valueStart, valueEnd);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error extracting game ID from content", e);
+        }
+        
+        // Always set chatId to 0 for game messages
+        inputMessage.setChatId(0L);
+        
+        // Set timestamp if not present
+        if (inputMessage.getTimestamp() == null) {
+            inputMessage.setTimestamp(LocalDateTime.now());
+        }
+        
+        // Set username if not present
+        if (inputMessage.getUsername() == null) {
+            inputMessage.setUsername(user.getUsername());
+        }
+        
+        // If gameId was extracted, set it in the message
+        if (gameId != null) {
+            inputMessage.setGameId(gameId);
+        }
+        
+        // Broadcast to appropriate topic
+        // If we have a game ID, send to the game-specific topic
+        if (gameId != null) {
+            String destination = "/topic/game." + gameId;
+            messagingTemplate.convertAndSend(destination, inputMessage);
+            log.info("Game message sent to {}", destination);
+        } else {
+            // Otherwise try to extract recipient info and send to their queue
+            Long recipientId = extractRecipientId(inputMessage.getContent());
+            if (recipientId != null) {
+                messagingTemplate.convertAndSendToUser(
+                    recipientId.toString(),
+                    "/queue/game-events",
+                    inputMessage
+                );
+                log.info("Game message sent to user {}", recipientId);
+            } else {
+                log.warn("Could not determine destination for game message");
+            }
+        }
+        
+        return inputMessage;
+    }
+    
+    /**
+     * Extract recipient ID from message content
+     */
+    private Long extractRecipientId(String content) {
+        if (content == null) return null;
+        
+        try {
+            // Simple extraction - in production use a proper JSON parser
+            int recipientIdStart = content.indexOf("\"recipientId\":");
+            if (recipientIdStart >= 0) {
+                int valueStart = recipientIdStart + 14; // Length of "recipientId":
+                int valueEnd = content.indexOf(",", valueStart);
+                if (valueEnd < 0) {
+                    valueEnd = content.indexOf("}", valueStart);
+                }
+                
+                if (valueEnd > valueStart) {
+                    String idStr = content.substring(valueStart, valueEnd).trim();
+                    return Long.parseLong(idStr);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error extracting recipient ID", e);
+        }
+        
+        return null;
     }
 }

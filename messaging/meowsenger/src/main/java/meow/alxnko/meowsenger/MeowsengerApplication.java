@@ -22,19 +22,20 @@ public class MeowsengerApplication {
 
 	/**
 	 * Ensure the server listens on the port specified by the PORT environment variable
+	 * only when deployed, otherwise use application properties
 	 */
 	@Bean
 	public WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> webServerFactoryCustomizer() {
 		return factory -> {
-			// Get port from environment variable or use default
+			// Get port from environment variable only for deployment
 			String port = System.getenv("PORT");
 			if (port != null && !port.isEmpty()) {
 				int portNumber = Integer.parseInt(port);
-				log.info("Setting server port to: {}", portNumber);
+				log.info("Setting server port from environment variable to: {}", portNumber);
 				factory.setPort(portNumber);
 			} else {
-				log.info("Using default port: 8080");
-				factory.setPort(8080);
+				// Let Spring use the port defined in application.properties
+				log.info("Using port configured in application.properties");
 			}
 		};
 	}

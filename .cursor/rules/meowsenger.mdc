@@ -22,6 +22,7 @@ alwaysApply: true
 - DO NOT add functions to useEffects dependencies array
 - Use useMemo and useCallback when possible
 - Try to optimize components and functionality
+- use meowsenger design solutions, like main green color, lower case etc.
 
 Prioritize Quality: Focus on clean, well-structured, maintainable, and robust code. Apply best practices for each technology.
 Significant Improvement: The goal is to create a vastly superior application compared to /meowsenger and /NewMeowsenger.

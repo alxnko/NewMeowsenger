@@ -39,7 +39,7 @@ public class JpaConfig {
     public JpaVendorAdapter jpaVendorAdapter() {
         HibernateJpaVendorAdapter adapter = new HibernateJpaVendorAdapter();
         adapter.setShowSql(false);
-        adapter.setGenerateDdl(false); // Don't generate DDL
+        adapter.setGenerateDdl(true); // Enable DDL generation
         adapter.setDatabasePlatform("org.hibernate.dialect.PostgreSQLDialect");
         return adapter;
     }
@@ -71,7 +71,7 @@ public class JpaConfig {
             EntityManagerFactoryBuilder builder, DataSource dataSource) {
         
         Map<String, Object> properties = new HashMap<>();
-        properties.put("hibernate.hbm2ddl.auto", "validate"); // Validate schema, don't create or modify
+        properties.put("hibernate.hbm2ddl.auto", "update"); // Update schema to create missing tables
         properties.put("hibernate.physical_naming_strategy", 
                        "org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl");
         properties.put("hibernate.globally_quoted_identifiers", "true");

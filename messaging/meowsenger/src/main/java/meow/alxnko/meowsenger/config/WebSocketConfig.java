@@ -44,10 +44,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setStreamBytesLimit(512 * 1024)
                 .setHttpMessageCacheSize(1000)
                 .setDisconnectDelay(30 * 1000);
+        log.info("Registered SockJS WebSocket endpoint at /ws with cross-origin support");
                 
         // Register direct WebSocket endpoint without SockJS - enhanced for Cloud Run
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*");
+        log.info("Registered direct WebSocket endpoint at /ws with cross-origin support");
                 
         // Debugging endpoint for connectivity testing with more permissive settings
         registry.addEndpoint("/ws-test")
@@ -55,6 +57,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .withSockJS()
                 .setWebSocketEnabled(true)
                 .setSessionCookieNeeded(true); // Enable cookies for session tracking
+        log.info("Registered test WebSocket endpoint at /ws-test with cross-origin support");
         
         log.info("STOMP endpoints registered with enhanced Cloud Run support");
     }

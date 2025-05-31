@@ -35,6 +35,16 @@ public class WebSocketController {
     private final UserRepository userRepository;
 
     /**
+     * Handle ping messages for connection health monitoring
+     */
+    @MessageMapping("/ping")
+    public void handlePing() {
+        // Just log at debug level to avoid too much noise in the logs
+        log.debug("Received ping from client");
+        // No response needed - the fact that the message was processed indicates the connection is alive
+    }
+
+    /**
      * Handle user registration when they connect with WebSocket
      */
     @MessageMapping("/register")

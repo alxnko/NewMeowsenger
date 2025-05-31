@@ -4,7 +4,7 @@ const ru = {
   profile: "профиль",
   settings: "настройки",
   logout: "выйти",
-  games: "игры",
+  games: "Игры",
   // Главная страница
   home_title: "используйте meowsenger для общения",
   home_subtitle: "красивый, быстрый и современный мессенджер",
@@ -94,6 +94,8 @@ const ru = {
   // Ввод сообщения
   edit_your_message: "редактируйте ваше сообщение...",
   reconnecting: "переподключение...",
+  connected: "подключено",
+  disconnected: "отключено",
   // Список сообщений
   load_older_messages: "загрузить старые сообщения",
   is_typing: "печатает...",
@@ -148,6 +150,7 @@ const ru = {
   group_name: "название группы",
   enter_group_name: "введите название группы",
   group_members: "участники группы",
+  enter_username_to_add: "введите имя пользователя для добавления",
   new_chat: "новый чат",
   members_count: "{count} участников",
   user_made_admin: "{actor} назначил(а) {target} админом",
@@ -228,6 +231,75 @@ const ru = {
     "пароль не должен быть похож на личную информацию",
   passwords_dont_match: "пароли не совпадают",
   username_taken: "это имя пользователя уже занято",
+  // Websocket status
+  not_authenticated: "не аутентифицирован",
+  connection_failed: "ошибка подключения",
+  could_not_connect_to_websocket: "не удалось подключиться к websocket",
+  websocket_connection_working: "websocket соединение работает",
+  websocket_test_failed: "тест websocket не пройден",
+  websocket_test_error: "ошибка теста websocket",
+  member_actions: "действия с участником",
+  owner: "владелец",
+  please_log_in: "пожалуйста, войдите",
+  enter_group_description: "введите описание группы",
+  connecting: "подключение...",
+
+  // Game translations
+  play: "играть",
+  tic_tac_toe: "крестики-нолики",
+  waiting_for_opponent: "ожидание соперника...",
+  invite_sent: "приглашение отправлено! ожидание присоединения соперника.",
+  share_link_to_invite:
+    "поделитесь этой ссылкой с другом, чтобы пригласить его поиграть.",
+  your_turn: "ваш ход",
+  opponent_turn: "ход {{username}}",
+  you_won: "вы выиграли!",
+  you_lost: "вы проиграли!",
+  game_draw: "ничья!",
+  play_again: "играть снова",
+  go_back: "назад",
+  game_error: "ошибка игры",
+  failed_to_initialize_game:
+    "не удалось инициализировать игру. пожалуйста, попробуйте снова.",
+  authentication_error:
+    "ошибка аутентификации. пожалуйста, войдите и попробуйте снова.",
+  authenticating: "аутентификация. пожалуйста, подождите...",
+  please_wait: "пожалуйста, подождите",
+  copy_game_link: "копировать ссылку на игру",
+  return_to_chat: "вернуться в чат",
+  link_copied: "ссылка скопирована в буфер обмена",
+  share_with_friends: "поделитесь с друзьями, чтобы играть вместе",
+  copy_failed: "не удалось скопировать ссылку",
+  invite_to_play: "пригласить {{username}} сыграть в {{game}}",
+  send_invitation: "отправить приглашение",
+  game_invitation_message: "{{username}} пригласил(а) вас сыграть в {{game}}",
+  game_invitation_expired_message: "приглашение от {{username}} истекло",
+  join_game: "присоединиться к игре",
+  invitation_expired: "приглашение истекло",
+  game_invitation_expired: "это игровое приглашение истекло",
+
+  // New game sharing translations
+  share_game: "поделиться игрой",
+  share_game_description: "пригласите друзей сыграть в крестики-нолики",
+  share: "поделиться",
+  failed_to_share_game: "не удалось поделиться игровым приглашением",
+  game_invitation: "игровое приглашение",
+  read: "прочитано",
+  sent: "отправлено",
+  sending: "отправляется...",
+  unknown_game_invitation: "неизвестное игровое приглашение",
+  connecting_to_game: "подключение к игровому серверу...",
+  setting_up_game: "настройка вашей игры...",
+  connection_taking_long:
+    "подключение занимает больше времени, чем ожидалось. попробуйте обновить страницу, если это продолжится.",
+  connection_problem: "проблема с подключением",
+  authentication_failed_message:
+    "мы не смогли проверить вашу учетную запись. пожалуйста, войдите снова.",
+  connection_failed_message:
+    "мы не смогли подключиться к игровому серверу. пожалуйста, проверьте ваше соединение.",
+  initialization_failed_message:
+    "мы не смогли настроить игру. пожалуйста, попробуйте снова.",
+  retry: "попробовать снова",
 };
 
 export default ru;

@@ -4,7 +4,7 @@ const en = {
   profile: "profile",
   settings: "settings",
   logout: "logout",
-  games: "games",
+  games: "Games",
   // Home page
   home_title: "use meowsenger for messaging",
   home_subtitle: "beautiful, fast and modern messenger",
@@ -79,6 +79,8 @@ const en = {
   // Message input
   edit_your_message: "edit your message...",
   reconnecting: "reconnecting...",
+  connected: "connected",
+  disconnected: "disconnected",
   // Message list
   load_older_messages: "load older messages",
   is_typing: "is typing...",
@@ -133,6 +135,7 @@ const en = {
   group_name: "group name",
   enter_group_name: "enter group name",
   group_members: "group members",
+  enter_username_to_add: "enter username to add",
   // Message system and reply labels
   message_deleted: "this message was deleted",
   edited_short: "(edited)",
@@ -148,6 +151,8 @@ const en = {
   system_removed_user: "{remover} removed {removed}",
   user_made_admin: "{actor} made {target} an admin",
   user_removed_admin: "{actor} removed admin rights from {target}",
+  user_added_to_group: "{actor} added {target} to the group",
+  user_removed_from_group: "{actor} removed {target} from the group",
   user_changed_group_settings: "{actor} changed group settings",
   updated_group_settings: "{actor} updated group settings",
   // Message list additions
@@ -229,6 +234,63 @@ const en = {
     "these preferences will not be saved until you log in. we've automatically detected your device settings.",
   accept_and_continue: "accept and continue",
   not_available_now: "not available now",
+  // Websocket status
+  not_authenticated: "not authenticated",
+  connection_failed: "connection failed",
+  could_not_connect_to_websocket: "could not connect to websocket",
+  websocket_connection_working: "websocket connection working",
+  websocket_test_failed: "websocket test failed",
+  websocket_test_error: "websocket test error",
+  member_actions: "member actions",
+  owner: "owner",
+  please_log_in: "please log in",
+  enter_group_description: "enter group description",
+  connecting: "connecting...",
+
+  // Game translations
+  tic_tac_toe: "tic tac toe",
+  loading: "loading",
+  creating_game: "creating game",
+  joining_game: "joining game",
+  authenticating: "authenticating",
+  connection_taking_long: "connection is taking longer than expected",
+  setting_up_game: "setting up the game environment",
+  preparing_game: "preparing the game",
+  waiting_for_opponent: "waiting for opponent",
+  your_turn: "your turn",
+  opponent_turn: "{username}'s turn",
+  game_error: "game error",
+  failed_to_initialize_game: "failed to initialize the game",
+  game_draw: "it's a draw!",
+  you_won: "you won!",
+  you_lost: "you lost!",
+  play_again: "play again",
+  go_back: "go back",
+  invite_to_play: "invite {username} to play {game}",
+  send_invitation: "send invitation",
+  copy_game_link: "copy game link",
+  share_with_friends: "share with friends",
+  share_game: "share game",
+  return_to_chat: "return to chat",
+  share_game_description: "invite friends to play by sharing this game",
+  link_copied: "link copied to clipboard",
+  invitation_sent: "game invitation sent",
+  game_invitation_message: "{username} invited you to play {game}",
+  game_invitation_expired_message:
+    "invitation from {username} to play {game} has expired",
+  join_game: "join game",
+  invitation_expired: "invitation expired",
+  please_wait: "please wait",
+  connecting_to_game: "connecting to game",
+  failed_to_share_game: "failed to share game",
+  connection_problem: "connection problem",
+  authentication_failed_message:
+    "failed to authenticate with the game server. please try again.",
+  connection_failed_message:
+    "failed to connect to the game server. please check your internet connection.",
+  initialization_failed_message:
+    "failed to initialize the game. please try again later.",
+  retry: "retry",
 };
 
 export default en;

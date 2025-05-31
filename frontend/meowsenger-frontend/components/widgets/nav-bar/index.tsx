@@ -40,7 +40,7 @@ export default function NavBar() {
   return (
     <>
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[100]">
-        <div className="flex bg-neutral-100 dark:bg-neutral-900 text-default-950 dark:text-default-50 rounded-full">
+        <div className="flex bg-neutral-300 dark:bg-neutral-900 text-default-950 dark:text-default-50 rounded-full">
           {!isLoggedIn ? (
             <>
               <Button

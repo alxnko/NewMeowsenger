@@ -10,23 +10,25 @@ import {
   translateSystemMessage,
 } from "@/utils/message-utils";
 import ForwardModal from "@/components/elements/forward-modal";
-import { FiEdit2, FiCornerUpRight } from "react-icons/fi";
+import { FiEdit2, FiCornerUpRight, FiPlay } from "react-icons/fi";
+import { useRouter } from "next/navigation";
+import GameInviteMessage from "@/app/games/tictactoe/components/GameInviteMessage";
 
 const messageStyles = tv({
   base: "rounded-lg p-3 max-w-[80%] lowercase relative",
   variants: {
     isOwn: {
-      true: "bg-green-100 dark:bg-green-900/30 ml-auto",
-      false: "bg-neutral-100 dark:bg-neutral-800 mr-auto",
+      true: "bg-green-300 dark:bg-green-900/30 ml-auto",
+      false: "bg-neutral-300 dark:bg-neutral-800 mr-auto",
     },
     isPending: {
       true: "opacity-60",
     },
     isSystem: {
-      true: "bg-blue-50 dark:bg-blue-900/20 mx-auto text-center italic text-xs py-2 max-w-[90%]",
+      true: "bg-blue-200 dark:bg-blue-900/20 mx-auto text-center italic text-xs py-2 max-w-[90%]",
     },
     isDeleted: {
-      true: "bg-neutral-50 dark:bg-neutral-900/50 text-neutral-500 dark:text-neutral-400 italic",
+      true: "bg-neutral-200 dark:bg-neutral-900/50 text-neutral-500 dark:text-neutral-400 italic",
     },
     isForwarded: {
       true: "border-l-4 border-green-400 dark:border-green-600",
@@ -103,9 +105,47 @@ export const Message = memo(
   }: MessageProps) => {
     const { editMessage, deleteMessage, sendMessage, forwardMessage } =
       useChat();
-    const { isAdmin } = useAuth();
+    const { isAdmin, user } = useAuth();
     const { t } = useLanguage();
+    const router = useRouter();
     const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+
+    // Check if this is a game invitation message
+    const gameInviteInfo = useMemo(() => {
+      try {
+        // First try to parse the content as JSON
+        let parsedContent;
+        try {
+          parsedContent = JSON.parse(content);
+          if (parsedContent.type === "GAME_INVITE") {
+            return {
+              isGameInvite: true,
+              gameId: parsedContent.gameId,
+              gameType: parsedContent.game,
+              inviterUsername: sender,
+            };
+          }
+        } catch (e) {
+          // Not valid JSON, check for special format
+        }
+
+        // Then check for the special format if JSON parsing failed
+        if (content.startsWith("__GAME_INVITE__:")) {
+          const parts = content.split(":");
+          if (parts.length >= 3) {
+            return {
+              isGameInvite: true,
+              gameId: parts[1],
+              gameType: parts[2],
+              inviterUsername: sender,
+            };
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing potential game invite:", e);
+      }
+      return { isGameInvite: false };
+    }, [content, sender]);
 
     // Memoize the formatted time to avoid unnecessary calculations
     const formattedTime = useMemo(
@@ -227,6 +267,71 @@ export const Message = memo(
       handleForward,
     ]);
 
+    // Render special game invitation card instead of regular message content
+    const messageContent = useMemo(() => {
+      // If it's a deleted message
+      if (isDeleted) {
+        return <span className="italic">{t("message_deleted")}</span>;
+      }
+
+      // If it's a system message
+      if (isSystem) {
+        return translateSystemMessage(
+          content,
+          t,
+          systemMessageType || "",
+          systemMessageParams || {}
+        );
+      }
+
+      // If it's a game invitation message
+      if (gameInviteInfo.isGameInvite) {
+        if (gameInviteInfo.gameType === "tictactoe") {
+          const safeGameId =
+            typeof gameInviteInfo.gameId === "string"
+              ? gameInviteInfo.gameId
+              : "";
+          return (
+            <GameInviteMessage
+              gameId={safeGameId}
+              inviterUsername={gameInviteInfo.inviterUsername || sender}
+              isExpired={false} // In a real app, you'd check if the invitation expired
+            />
+          );
+        }
+        // For unknown game types, show a fallback
+        return (
+          <div className="flex flex-col">
+            <div className="flex items-center mb-2">
+              <FiPlay className="mr-2 text-green-600" />
+              <span className="font-medium">{t("game_invitation")}</span>
+            </div>
+            <div>{t("unknown_game_invitation")}</div>
+          </div>
+        );
+      }
+
+      // Regular message
+      return (
+        <>
+          {content}
+          {isEdited && (
+            <span className="ml-1 text-xs opacity-60">{t("edited_short")}</span>
+          )}
+        </>
+      );
+    }, [
+      content,
+      isDeleted,
+      isSystem,
+      isEdited,
+      systemMessageType,
+      systemMessageParams,
+      t,
+      gameInviteInfo,
+      sender,
+    ]);
+
     return (
       <>
         <div
@@ -248,18 +353,9 @@ export const Message = memo(
             {replyComponent}
             {senderComponent}
             {forwardedIndicator}
-            <p className={`text-sm text-neutral-900 dark:text-neutral-100`}>
-              {isDeleted
-                ? t("message_deleted")
-                : isSystem
-                ? translateSystemMessage(
-                    content,
-                    t,
-                    systemMessageType,
-                    systemMessageParams
-                  )
-                : content}
-            </p>
+            <div className={`text-sm text-neutral-900 dark:text-neutral-100`}>
+              {messageContent}
+            </div>
 
             {!isSystem && (
               <div
